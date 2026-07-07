@@ -1,0 +1,119 @@
+# MODO PORTABLE / OFFLINE - SGF v4.0
+
+## Problema: npm install no funciona por proxy o falta de internet
+
+Si tu red tiene proxy o no puede descargar dependencias de Internet, tienes
+dos opciones:
+
+---
+
+## OPCION A: Configurar proxy en el Panel de Control (recomendado)
+
+1. Abre SGF-Panel.bat
+2. Ve a la pestana "Configuracion"
+3. En la seccion "Proxy", ingresa la URL de tu proxy:
+   http://10.0.0.1:8080
+4. Haz clic en "Configurar Proxy npm"
+5. Ve a la pestana "Verificar Archivos"
+6. Haz clic en "Instalar Dependencias (npm)"
+
+Ahora npm usara el proxy para descargar los paquetes.
+
+---
+
+## OPCION B: Empaquetar node_modules portable (offline total)
+
+Si NUNCA tendras internet en las maquinas donde corre SGF, necesitas
+una copia unica de node_modules que copies manualmente.
+
+### Paso 1: En una maquina CON internet (una sola vez)
+
+```batch
+cd sgf-refactor\server
+npm install
+:: Esto crea server/node_modules con todas las dependencias
+
+cd ..\client
+npm install
+:: Esto crea client/node_modules con todas las dependencias
+```
+
+### Paso 2: Copia las carpetas node_modules
+
+Las carpetas server/node_modules y client/node_modules ahora contienen
+todo lo necesario. Copia estas carpetas COMPLETAS junto con el resto del
+proyecto a un USB, red compartida, o donde necesites.
+
+```
+sgf-refactor/
+├── SGF-Panel.bat         <-- El launcher principal
+├── server/
+│   ├── node_modules/     <-- COPIAR ESTA CARPETA COMPLETA
+│   ├── .env
+│   ├── package.json
+│   └── src/...
+├── client/
+│   ├── node_modules/     <-- COPIAR ESTA CARPETA COMPLETA
+│   ├── package.json
+│   └── src/...
+└── launcher/
+    └── sgf-launcher.py
+```
+
+### Paso 3: En las otras maquinas
+
+Simplemente pega TODO el contenido en cualquier carpeta.
+El Panel de Control verificara que node_modules existe y no intentara
+npm install porque ya esta todo.
+
+---
+
+## OPCION C: Usar npm pack para crear un bundle
+
+En una maquina con internet:
+
+```batch
+cd sgf-refactor\server
+npm pack
+:: Genera sgf-server-4.0.0.tgz
+
+cd ..\client
+npm pack
+:: Genera sgf-client-4.0.0.tgz
+```
+
+Luego en la maquina sin internet:
+
+```batch
+cd sgf-refactor\server
+npm install ../sgf-server-4.0.0.tgz
+
+cd ..\client
+npm install ../sgf-client-4.0.0.tgz
+```
+
+---
+
+## REQUISITOS MINIMOS EN CADA MAQUINA
+
+### Maquina Servidor (donde corre el backend + Oracle):
+- Node.js 18+ (https://nodejs.org)
+- Python 3.8+ (para el Panel de Control)
+- Oracle Database accesible
+- Puerto 3000 abierto en firewall
+
+### Maquinas Cliente (solo navegador):
+- Navegador web moderno (Chrome, Firefox, Edge)
+- Acceso a http://IP-DEL-SERVIDOR:3000
+
+---
+
+## SI EL PANEL DE CONTROL NO ABRE
+
+Si al ejecutar SGF-Panel.bat no se abre la ventana grafica:
+
+1. Verifica que Python este instalado: `python --version`
+2. Instala tkinter si falta: `pip install tk`
+3. Como alternativa, usa los .bat simples:
+   - `start-servidor.bat` (para iniciar el backend)
+   - `start-cliente.bat` (para desarrollo con Vite)

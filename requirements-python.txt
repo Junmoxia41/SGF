@@ -1,0 +1,12 @@
+# SGF v4.0 - Dependencias Python instalables con pip
+#
+# Instalar con:
+#   pip install -r requirements-python.txt
+#
+# IMPORTANTE:
+# - El launcher sgf-launcher.py usa casi todo de la libreria estandar de Python.
+# - tkinter NO se instala normalmente por pip en Windows; viene con Python.
+# - Si tkinter falta en Linux, instalar paquete del sistema: python3-tk
+# - PyInstaller solo es necesario si quieres compilar SGF-Panel.exe
+
+pyinstaller>=6.0

@@ -18,8 +18,25 @@ export const SERVER_CONFIG = {
 };
 
 export const JWT_CONFIG = {
+  // En produccion JWT_SECRET SIEMPRE debe venir del .env.
+  // El valor por defecto es solo un marcador para que el servidor
+  // arranque en un entorno de desarrollo fresco. Forzamos a que sea
+  // cambiado emitiendo una advertencia en consola si se usa el default.
   secret: process.env.JWT_SECRET || "sgf-jwt-secret-cambiar-en-produccion",
   expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+};
+
+if (JWT_CONFIG.secret === "sgf-jwt-secret-cambiar-en-produccion") {
+  console.warn(
+    "[SGF] ADVERTENCIA: JWT_SECRET esta usando el valor por defecto. " +
+    "Defina uno propio en server/.env antes de desplegar.",
+  );
+}
+
+export const SECURITY_CONFIG = {
+  loginRatePerMin: Number(process.env.LOGIN_RATE_PER_MIN) || 5,
+  loginRatePer15Min: Number(process.env.LOGIN_RATE_PER_15MIN) || 30,
+  trustProxy: String(process.env.TRUST_PROXY || "").trim(),
 };
 
 export const ORACLE_CONFIG = {

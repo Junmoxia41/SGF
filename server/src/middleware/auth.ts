@@ -76,7 +76,37 @@ export function sendJson(res: ServerResponse, status: number, payload: unknown) 
   res.end(JSON.stringify(payload));
 }
 
+/**
+ * Resuelve la IP del cliente respetando encabezados de proxy SOLO si
+ * la variable de entorno TRUST_PROXY está activa. Por defecto se usa la
+ * IP del socket TCP, que es la IP real del cliente en una LAN.
+ *
+ * TRUST_PROXY acepta:
+ *   - "1"           -> toma la primera IP de X-Forwarded-For
+ *   - "true"        -> igual a "1"
+ *   - "N" (numero)  -> toma la IP en la posicion N contando desde el final
+ *                      (1 = la ultima, que suele ser la del proxy inmediato)
+ *
+ * Esto evita que un cliente cualquiera mande X-Forwarded-For en su
+ * peticion y falsifique la IP que queda registrada en SGF_LOGS.
+ */
 export function getRequestIp(req: IncomingMessage): string {
+  const trustRaw = String(process.env.TRUST_PROXY || "").trim().toLowerCase();
+  if (trustRaw === "1" || trustRaw === "true") {
+    const forwarded = (req.headers["x-forwarded-for"] || "").toString().trim();
+    if (forwarded) {
+      const first = forwarded.split(",")[0]?.trim();
+      if (first) return first;
+    }
+  } else if (/^\d+$/.test(trustRaw)) {
+    const hops = Number(trustRaw);
+    const forwarded = (req.headers["x-forwarded-for"] || "").toString().trim();
+    if (forwarded) {
+      const parts = forwarded.split(",").map((p) => p.trim()).filter(Boolean);
+      const idx = Math.max(0, parts.length - hops);
+      if (parts[idx]) return parts[idx];
+    }
+  }
   return (req.socket?.remoteAddress || "desconocida").replace("::ffff:", "");
 }
 
@@ -106,3 +136,65 @@ export async function readJsonBody(req: IncomingMessage, maxBytes = 5 * 1024 * 1
     req.on("error", reject);
   });
 }
+
+/**
+ * Rate limiter sencillo en memoria para endpoints sensibles (p.ej. login).
+ * Mantiene contadores por clave (IP por defecto). Suficiente para una
+ * aplicacion LAN; en despliegues con multiples instancias habria que
+ * moverlo a Redis o similar.
+ */
+type RateLimitEntry = { hits: number; resetAt: number };
+const rateLimitBuckets = new Map<string, RateLimitEntry>();
+
+export interface RateLimitOptions {
+  /** Tamanio de la ventana en ms */
+  windowMs: number;
+  /** Maximo de requests dentro de la ventana */
+  max: number;
+}
+
+export interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+  retryAfterSeconds: number;
+}
+
+export function checkRateLimit(key: string, opts: RateLimitOptions): RateLimitResult {
+  const now = Date.now();
+  const entry = rateLimitBuckets.get(key);
+  if (!entry || entry.resetAt <= now) {
+    const next = { hits: 1, resetAt: now + opts.windowMs };
+    rateLimitBuckets.set(key, next);
+    return {
+      allowed: true,
+      remaining: Math.max(0, opts.max - 1),
+      resetAt: next.resetAt,
+      retryAfterSeconds: 0,
+    };
+  }
+  entry.hits += 1;
+  if (entry.hits > opts.max) {
+    const retryAfter = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+    return {
+      allowed: false,
+      remaining: 0,
+      resetAt: entry.resetAt,
+      retryAfterSeconds: retryAfter,
+    };
+  }
+  return {
+    allowed: true,
+    remaining: Math.max(0, opts.max - entry.hits),
+    resetAt: entry.resetAt,
+    retryAfterSeconds: 0,
+  };
+}
+
+/** Limpiador periodico para que el Map no crezca indefinidamente. */
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of rateLimitBuckets) {
+    if (v.resetAt <= now) rateLimitBuckets.delete(k);
+  }
+}, 5 * 60 * 1000).unref();

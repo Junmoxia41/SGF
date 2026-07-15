@@ -1,0 +1,68 @@
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.pnpm-store/
+.eslintcache
+.stylelintcache
+
+# --- Builds del proyecto ---
+client/dist/
+server/dist/
+sgf-panel.exe
+dist/
+
+# --- Datos de runtime (BD local SQLite, etc.) ---
+server-data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# --- Entorno / secretos ---
+server/.env
+server/.env.local
+client/.env
+client/.env.local
+.env
+.env.local
+*.pem
+*.key
+secrets/
+
+# --- Editores / OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- Logs ---
+*.log
+logs/
+launcher-logs/
+
+# --- Python (panel launcher) ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# --- TypeScript build info ---
+*.tsbuildinfo
+
+# --- Test artifacts ---
+coverage/
+.nyc_output/

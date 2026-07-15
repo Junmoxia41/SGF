@@ -3,21 +3,51 @@ import type { ServerResponse } from "node:http";
 import bcrypt from "bcryptjs";
 import { execute, getDbMode, query } from "../models/database.js";
 import { signToken } from "../utils/jwt.js";
-import { sendJson, getRequestIp, readJsonBody } from "../middleware/auth.js";
+import {
+  checkRateLimit,
+  getRequestIp,
+  readJsonBody,
+  sendJson,
+} from "../middleware/auth.js";
 import { auditLog } from "../middleware/logger.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 
-function normalizeUser(row: any) {
+/**
+ * Normalizacion INTERNA: incluye el hash de la contrasena.
+ * Se usa unicamente dentro del servidor para validar credenciales.
+ * NUNCA debe serializarse a una respuesta HTTP.
+ */
+function normalizeUserInternal(row: any) {
+  const role: "admin" | "usuario" =
+    (row?.ROL ?? row?.ROLE ?? row?.role ?? "usuario") === "admin" ? "admin" : "usuario";
   return {
     id: String(row?.ID ?? row?.id ?? ""),
     username: String(row?.USERNAME ?? row?.username ?? ""),
     name: String(row?.NOMBRE ?? row?.NAME ?? row?.name ?? ""),
-    role: (row?.ROL ?? row?.ROLE ?? row?.role ?? "usuario") === "admin" ? "admin" : "usuario",
-    active: Number(row?.ACTIVO ?? row?.ACTIVE ?? row?.active ?? 0),
+    role,
+    active: Number(row?.ACTIVO ?? row?.ACTIVE ?? row?.active ?? 0) === 1,
     createdAt: String(row?.CREADO ?? row?.CREATED_AT ?? row?.created_at ?? ""),
     passwordHash: String(row?.PASSWORD_HASH ?? ""),
   };
 }
+
+/**
+ * Normalizacion PUBLICA: lo que se envia al cliente.
+ * Misma forma que antes pero sin passwordHash.
+ */
+function normalizeUserPublic(internal: ReturnType<typeof normalizeUserInternal>): import("../models/types.js").SessionUser {
+  return {
+    id: internal.id,
+    username: internal.username,
+    name: internal.name,
+    role: internal.role,
+    active: internal.active,
+    createdAt: internal.createdAt,
+  };
+}
+
+const LOGIN_LIMIT_PER_MIN = Number(process.env.LOGIN_RATE_PER_MIN || 5);
+const LOGIN_LIMIT_PER_15MIN = Number(process.env.LOGIN_RATE_PER_15MIN || 30);
 
 export async function handleLogin(req: AuthenticatedRequest, res: ServerResponse) {
   let body: any;
@@ -27,7 +57,33 @@ export async function handleLogin(req: AuthenticatedRequest, res: ServerResponse
     return sendJson(res, 400, { success: false, error: "JSON invalido." });
   }
 
-  const username = String(body.username || "").trim();
+  const ip = getRequestIp(req);
+  const usernameAttempt = String(body.username || "").trim();
+  const key = `login:${ip}:${usernameAttempt.toLowerCase() || "_"}`;
+
+  // Ventana corta (1 minuto)
+  const shortLimit = checkRateLimit(key, { windowMs: 60 * 1000, max: LOGIN_LIMIT_PER_MIN });
+  if (!shortLimit.allowed) {
+    res.setHeader("Retry-After", String(shortLimit.retryAfterSeconds));
+    res.setHeader("X-RateLimit-Remaining", "0");
+    return sendJson(res, 429, {
+      success: false,
+      error: `Demasiados intentos. Espere ${shortLimit.retryAfterSeconds}s antes de reintentar.`,
+    });
+  }
+
+  // Ventana larga (15 minutos)
+  const longLimit = checkRateLimit(key, { windowMs: 15 * 60 * 1000, max: LOGIN_LIMIT_PER_15MIN });
+  if (!longLimit.allowed) {
+    res.setHeader("Retry-After", String(longLimit.retryAfterSeconds));
+    res.setHeader("X-RateLimit-Remaining", "0");
+    return sendJson(res, 429, {
+      success: false,
+      error: `Demasiados intentos. Espere ${longLimit.retryAfterSeconds}s antes de reintentar.`,
+    });
+  }
+
+  const username = usernameAttempt;
   const password = String(body.password || "").trim();
   const machineId = String(body.machineId || "pc").trim();
 
@@ -46,60 +102,47 @@ export async function handleLogin(req: AuthenticatedRequest, res: ServerResponse
       return sendJson(res, 401, { success: false, error: "Usuario o contrasena incorrectos." });
     }
 
-    const user = normalizeUser(rows[0]);
-    if (!user.active) {
+    const internal = normalizeUserInternal(rows[0]);
+    if (!internal.active) {
       return sendJson(res, 403, { success: false, error: "Usuario inactivo. Contacte al administrador." });
     }
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
+    const ok = await bcrypt.compare(password, internal.passwordHash);
     if (!ok) {
       return sendJson(res, 401, { success: false, error: "Usuario o contrasena incorrectos." });
     }
 
-    const token = signToken({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role as "admin" | "usuario",
-      active: true,
-      createdAt: user.createdAt,
-    });
+    const publicUser = normalizeUserPublic(internal);
+
+    const token = signToken(publicUser);
 
     const sessionId = randomUUID();
-    const ip = getRequestIp(req);
 
     if (dbMode === "oracle") {
-      await execute(`UPDATE SGF_SESIONES SET ACTIVE = 0, ENDED_AT = SYSTIMESTAMP WHERE USER_ID = :uid AND ACTIVE = 1`, { uid: user.id });
+      await execute(`UPDATE SGF_SESIONES SET ACTIVE = 0, ENDED_AT = SYSTIMESTAMP WHERE USER_ID = :uid AND ACTIVE = 1`, { uid: internal.id });
       await execute(
         `INSERT INTO SGF_SESIONES (ID, USER_ID, SESSION_TOKEN, MACHINE_ID, IP_ADDRESS, ACTIVE, CREATED_AT, EXPIRES_AT)
          VALUES (:id, :uid, :tok, :m, :ip, 1, SYSTIMESTAMP, SYSTIMESTAMP + INTERVAL '8' HOUR)`,
-        { id: sessionId, uid: user.id, tok: token, m: machineId, ip },
+        { id: sessionId, uid: internal.id, tok: token, m: machineId, ip },
       );
     } else {
-      await execute(`UPDATE SGF_SESIONES SET ACTIVO = 0 WHERE USER_ID = :uid AND ACTIVO = 1`, { uid: user.id });
+      await execute(`UPDATE SGF_SESIONES SET ACTIVO = 0 WHERE USER_ID = :uid AND ACTIVO = 1`, { uid: internal.id });
       await execute(
         `INSERT INTO SGF_SESIONES (ID, USER_ID, TOKEN, MAQUINA, IP, ACTIVO, CREADO, EXPIRA)
          VALUES (:id, :uid, :tok, :m, :ip, 1, datetime('now'), datetime('now','+8 hours'))`,
-        { id: sessionId, uid: user.id, tok: token, m: machineId, ip },
+        { id: sessionId, uid: internal.id, tok: token, m: machineId, ip },
       );
     }
 
-    req.currentUser = {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role as "admin" | "usuario",
-      active: true,
-      createdAt: user.createdAt,
-    };
+    req.currentUser = publicUser;
 
-    await auditLog(req, "login", "usuario", user.id, "info", `${username} - ${machineId}`);
+    await auditLog(req, "login", "usuario", internal.id, "info", `${username} - ${machineId}`);
 
     return sendJson(res, 200, {
       success: true,
       message: "Sesion iniciada.",
       data: {
-        user: req.currentUser,
+        user: publicUser,
         token,
         sessionId,
         machineId,
@@ -139,17 +182,10 @@ export async function handleMe(req: AuthenticatedRequest, res: ServerResponse) {
       return sendJson(res, 404, { success: false, error: "Usuario no encontrado." });
     }
 
-    const user = normalizeUser(rows[0]);
+    const internal = normalizeUserInternal(rows[0]);
     return sendJson(res, 200, {
       success: true,
-      data: {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-        active: Boolean(user.active),
-        createdAt: user.createdAt,
-      },
+      data: normalizeUserPublic(internal),
     });
   } catch (error: any) {
     return sendJson(res, 503, { success: false, error: `Error: ${error.message}` });

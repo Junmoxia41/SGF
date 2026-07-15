@@ -1,5 +1,5 @@
 import type { ServerResponse } from "node:http";
-import { execute, getDbMode, query } from "../models/database.js";
+import { execute, getDbMode, paginationExpr, query } from "../models/database.js";
 import { sendJson, requireAdmin } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 
@@ -26,8 +26,8 @@ export async function handleGetLogs(req: AuthenticatedRequest, res: ServerRespon
 
   try {
     const dbMode = getDbMode();
-    const levelColumn = dbMode === "oracle" ? "LEVEL" : "NIVEL";
-    const dateColumn = dbMode === "oracle" ? "CREATED_AT" : "CREADO";
+    const levelColumn = dbMode === "sqlite" ? "NIVEL" : "LEVEL";
+    const dateColumn = dbMode === "sqlite" ? "CREADO" : "CREATED_AT";
 
     let where = "";
     const params: Record<string, any> = {};
@@ -40,9 +40,7 @@ export async function handleGetLogs(req: AuthenticatedRequest, res: ServerRespon
     const total = Number(countRows[0]?.CNT || 0);
     const offset = (page - 1) * pageSize;
 
-    const sql = dbMode === "oracle"
-      ? `SELECT * FROM SGF_LOGS ${where} ORDER BY ${dateColumn} DESC OFFSET :off ROWS FETCH NEXT :lim ROWS ONLY`
-      : `SELECT * FROM SGF_LOGS ${where} ORDER BY ${dateColumn} DESC LIMIT :lim OFFSET :off`;
+    const sql = `SELECT * FROM SGF_LOGS ${where} ORDER BY ${dateColumn} DESC ${paginationExpr("off", "lim")}`;
 
     const rows = await query<any>(sql, { ...params, lim: pageSize, off: offset });
     return sendJson(res, 200, {

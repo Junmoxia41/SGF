@@ -165,7 +165,9 @@ def kill_port(port):
     return False
 
 def read_env():
-    cfg = {"host":"25","port":"1521","service":"PCELULAR","user":"pcelular","http":"3000"}
+    cfg = {"host":"25","port":"1521","service":"PCELULAR","user":"pcelular",
+           "http":"3000","db_type":"",
+           "mssql_server":"localhost","mssql_port":"1433","mssql_db":"sgf","mssql_user":"sa"}
     f = SERVER_DIR / ".env"
     if f.exists():
         for line in open(f, encoding="utf-8"):
@@ -177,6 +179,11 @@ def read_env():
             elif k=="ORACLE_SERVICE": cfg["service"]=v
             elif k=="ORACLE_USER": cfg["user"]=v
             elif k=="PORT": cfg["http"]=v
+            elif k=="DB_TYPE": cfg["db_type"]=v
+            elif k=="MSSQL_SERVER": cfg["mssql_server"]=v
+            elif k=="MSSQL_PORT": cfg["mssql_port"]=v
+            elif k=="MSSQL_DATABASE": cfg["mssql_db"]=v
+            elif k=="MSSQL_USER": cfg["mssql_user"]=v
     return cfg
 
 # ================================================================
@@ -339,11 +346,13 @@ class SGFLauncher:
         ni=f"v{self.node_version}" if self.node_version else "NO INSTALADO"
         if self.node_installer: ni+=f"  [Instalador: {Path(self.node_installer).name}]"
         npi=f"v{self.npm_version}" if self.npm_version else ("NO DETECTADO" if self.node_path else "-")
+        dbtype=cfg.get("db_type","").upper() or "AUTO"
         text=(f"  Node.js:  {ni}\n"
               f"  npm:      {npi}\n"
               f"  HTTP:     http://localhost:{cfg['http']}\n"
-              f"  Oracle:   {cfg['host']}:{cfg['port']}/{cfg['service']}\n"
-              f"  Usuario:  {cfg['user']}\n"
+              f"  BD tipo:  {dbtype}\n"
+              f"  Oracle:   {cfg['host']}:{cfg['port']}/{cfg['service']} (user={cfg['user']})\n"
+              f"  SQL Srv:  {cfg['mssql_server']}:{cfg['mssql_port']}/{cfg['mssql_db']} (user={cfg['mssql_user']})\n"
               f"  Proyecto: {BASE_DIR}")
         if self.conn_info: self.conn_info.configure(text=text)
 
@@ -367,7 +376,18 @@ class SGFLauncher:
         c=self.card(p);c.pack(fill="both",expand=True,padx=8,pady=8)
         tk.Label(c,text="Configuracion (.env)",font=("Segoe UI",12,"bold"),bg=self.WHITE,fg=self.DARK).pack(anchor="w",padx=14,pady=(10,2))
         cfg=read_env()
-        fields=[("Puerto HTTP","http",cfg["http"]),("Oracle Host","host",cfg["host"]),("Oracle Puerto","port",cfg["port"]),("Oracle Servicio","service",cfg["service"]),("Oracle Usuario","user",cfg["user"])]
+        fields=[
+            ("Puerto HTTP","http",cfg["http"]),
+            ("Motor BD","db_type",cfg.get("db_type","")),
+            ("Oracle Host","host",cfg["host"]),
+            ("Oracle Puerto","port",cfg["port"]),
+            ("Oracle Servicio","service",cfg["service"]),
+            ("Oracle Usuario","user",cfg["user"]),
+            ("SQL Srv Server","mssql_server",cfg["mssql_server"]),
+            ("SQL Srv Puerto","mssql_port",cfg["mssql_port"]),
+            ("SQL Srv Base","mssql_db",cfg["mssql_db"]),
+            ("SQL Srv Usuario","mssql_user",cfg["mssql_user"]),
+        ]
         self.env_entries={}
         for label,key,default in fields:
             r=tk.Frame(c,bg=self.WHITE);r.pack(fill="x",padx=14,pady=2)
@@ -387,17 +407,27 @@ class SGFLauncher:
 
     def save_env(self):
         c=(f"# SGF v4.0\nPORT={self.env_entries['http'].get().strip()}\nHOST=0.0.0.0\n\n"
+           f"DB_TYPE={self.env_entries['db_type'].get().strip()}\n\n"
            f"ORACLE_USER={self.env_entries['user'].get().strip()}\nORACLE_PASSWORD=pcelular\n"
            f"ORACLE_HOST={self.env_entries['host'].get().strip()}\nORACLE_PORT={self.env_entries['port'].get().strip()}\n"
            f"ORACLE_SERVICE={self.env_entries['service'].get().strip()}\n"
            f"ORACLE_POOL_MIN=2\nORACLE_POOL_MAX=20\nORACLE_POOL_INCREMENT=2\nORACLE_POOL_TIMEOUT=60\n\n"
+           f"MSSQL_USER={self.env_entries['mssql_user'].get().strip()}\nMSSQL_PASSWORD=\n"
+           f"MSSQL_SERVER={self.env_entries['mssql_server'].get().strip()}\nMSSQL_PORT={self.env_entries['mssql_port'].get().strip()}\n"
+           f"MSSQL_DATABASE={self.env_entries['mssql_db'].get().strip()}\n"
+           f"MSSQL_ENCRYPT=false\nMSSQL_TRUST_CERT=true\n"
+           f"MSSQL_POOL_MIN=0\nMSSQL_POOL_MAX=10\nMSSQL_POOL_IDLE_MS=30000\n\n"
            f"JWT_SECRET=sgf-jwt-secret-cambiar-en-produccion\nJWT_EXPIRES_IN=8h\n\n"
-           f"REQUEST_TIMEOUT_MS=30000\nMAX_FILE_SIZE_MB=10\n")
+           f"REQUEST_TIMEOUT_MS=30000\nMAX_FILE_SIZE_MB=10\n"
+           f"LOGIN_RATE_PER_MIN=5\nLOGIN_RATE_PER_15MIN=30\n")
         (SERVER_DIR/".env").write_text(c,encoding="utf-8")
         self._refresh_conn_info();messagebox.showinfo("Guardado","Configuracion guardada.")
 
     def reset_env(self):
-        for k,e in self.env_entries.items():e.delete(0,tk.END);e.insert(0,{"http":"3000","host":"25","port":"1521","service":"PCELULAR","user":"pcelular"}.get(k,""))
+        defaults={"http":"3000","db_type":"","host":"25","port":"1521","service":"PCELULAR","user":"pcelular",
+                  "mssql_server":"localhost","mssql_port":"1433","mssql_db":"sgf","mssql_user":"sa"}
+        for k,e in self.env_entries.items():
+            e.delete(0,tk.END);e.insert(0,defaults.get(k,""))
         self.save_env()
 
     def configure_proxy(self):
@@ -553,7 +583,11 @@ class SGFLauncher:
         self.vprint("\n[5/5] Configuracion","#fbbf24")
         env=SERVER_DIR/".env"
         if env.exists():
-            cfg=read_env();self.vprint(f"      [OK] HTTP:{cfg['http']} Oracle:{cfg['host']}:{cfg['port']}/{cfg['service']}","#34d399")
+            cfg=read_env()
+            dbtype=cfg.get("db_type","").upper() or "AUTO"
+            self.vprint(f"      [OK] HTTP:{cfg['http']} BD:{dbtype}","#34d399")
+            self.vprint(f"      Oracle: {cfg['host']}:{cfg['port']}/{cfg['service']} (user={cfg['user']})","#34d399")
+            self.vprint(f"      SQL Srv: {cfg['mssql_server']}:{cfg['mssql_port']}/{cfg['mssql_db']} (user={cfg['mssql_user']})","#34d399")
         else: self.vprint(f"      [FALTA] server/.env","#f87171")
 
         # Resumen

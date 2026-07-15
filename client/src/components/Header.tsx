@@ -1,4 +1,14 @@
-import { Database, LogOut, Moon, Plug, Sun, Wifi, WifiOff } from "lucide-react";
+import {
+  Database,
+  HardDrive,
+  LogOut,
+  Moon,
+  Plug,
+  Server,
+  Sun,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import type { SessionUser } from "../types/api.ts";
 
 type Props = {
@@ -11,7 +21,21 @@ type Props = {
   onOpenDbConfig: () => void;
 };
 
-export function Header({ user, theme, dbOk, onToggleTheme, onLogout, onOpenDbConfig }: Props) {
+function MotorIcon({ mode, className }: { mode?: string; className?: string }) {
+  if (mode === "mssql") return <Server className={className} />;
+  if (mode === "oracle") return <Database className={className} />;
+  if (mode === "sqlite") return <HardDrive className={className} />;
+  return <Database className={className} />;
+}
+
+function MotorLabel(mode?: string): string {
+  if (mode === "mssql") return "SQL Server";
+  if (mode === "oracle") return "Oracle";
+  if (mode === "sqlite") return "SQLite";
+  return "BD";
+}
+
+export function Header({ user, theme, dbOk, dbMode, onToggleTheme, onLogout, onOpenDbConfig }: Props) {
   return (
     <header className="sticky top-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
@@ -28,10 +52,16 @@ export function Header({ user, theme, dbOk, onToggleTheme, onLogout, onOpenDbCon
         <div className="flex items-center gap-2">
           <button
             onClick={onOpenDbConfig}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${dbOk ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40" : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40"}`}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              dbOk
+                ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+                : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+            }`}
+            title={`Motor activo: ${MotorLabel(dbMode)}`}
           >
             {dbOk ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            <span className="hidden sm:inline">Conectarse</span>
+            <MotorIcon mode={dbMode} className="w-3 h-3 opacity-70" />
+            <span className="hidden md:inline uppercase">{MotorLabel(dbMode)}</span>
             <Plug className="w-3 h-3 ml-0.5 opacity-60" />
           </button>
 

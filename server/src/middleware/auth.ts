@@ -44,6 +44,8 @@ export async function authenticate(req: AuthenticatedRequest, res: ServerRespons
 
     if (dbMode === "oracle") {
       await execute(`UPDATE SGF_SESIONES SET EXPIRES_AT = SYSTIMESTAMP + INTERVAL '8' HOUR WHERE SESSION_TOKEN = :t`, { t: token });
+    } else if (dbMode === "mssql") {
+      await execute(`UPDATE SGF_SESIONES SET EXPIRES_AT = DATEADD(HOUR, 8, SYSUTCDATETIME()) WHERE SESSION_TOKEN = :t`, { t: token });
     } else {
       await execute(`UPDATE SGF_SESIONES SET EXPIRA = datetime('now','+8 hours') WHERE TOKEN = :t`, { t: token });
     }

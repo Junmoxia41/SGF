@@ -3,11 +3,21 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execute, getDbMode, query } from "../models/database.js";
+import {
+  execute,
+  isOracleLegacyTablesAvailable,
+  nowExpr,
+  query,
+} from "../models/database.js";
 import { sendJson } from "../middleware/auth.js";
 import { auditLog } from "../middleware/logger.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
-import { normalizarNumero, packStoredFacturaText, parseFacturaEtcsa, type FacturaExtraida } from "../utils/factura-parser.js";
+import {
+  normalizarNumero,
+  packStoredFacturaText,
+  parseFacturaEtcsa,
+  type FacturaExtraida,
+} from "../utils/factura-parser.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_DATA_DIR = path.resolve(__dirname, "../../../server-data");
@@ -95,7 +105,16 @@ async function limpiarFacturaExistente(noFactura: string) {
       await execute(`DELETE FROM SGF_SERVICIOS WHERE FACTURA_ID = :id`, { id: facturaId });
       await execute(`DELETE FROM SGF_FACTURAS WHERE ID = :id`, { id: facturaId });
     }
-    await execute(`DELETE FROM PCELULAR.CARGARARCH WHERE TIRA LIKE :t`, { t: `Factura ${noFactura}%` });
+    // Solo limpiamos PCELULAR.CARGARARCH si estamos en Oracle, donde
+    // esa tabla existe. En SQL Server o SQLite no existe ese esquema
+    // y cualquier intento de DELETE fallaria con error de tabla inexistente.
+    if (isOracleLegacyTablesAvailable()) {
+      try {
+        await execute(`DELETE FROM PCELULAR.CARGARARCH WHERE TIRA LIKE :t`, { t: `Factura ${noFactura}%` });
+      } catch (error: any) {
+        console.warn(`[SGF] No se pudo limpiar PCELULAR.CARGARARCH: ${error.message}`);
+      }
+    }
   } catch {
     // ignore cleanup issues
   }
@@ -104,8 +123,7 @@ async function limpiarFacturaExistente(noFactura: string) {
 async function guardarFacturaCompleta(req: AuthenticatedRequest, factura: FacturaExtraida, textoOcr: string, filename: string) {
   const facturaId = randomUUID();
   const userId = req.currentUser?.id || "";
-  const dbMode = getDbMode();
-  const nowCreated = dbMode === "oracle" ? "SYSTIMESTAMP" : "datetime('now')";
+  const now = nowExpr();
 
   await execute(
     `INSERT INTO SGF_FACTURAS (
@@ -117,7 +135,7 @@ async function guardarFacturaCompleta(req: AuthenticatedRequest, factura: Factur
       :id, :cliente, :cuenta, :numeroCliente, :numeroCuenta, :noFactura,
       :fechaEmision, :fechaVencimiento, :periodoConsumo, :codigoPago,
       :moneda, :nit, :cuota, :consumo, :comision, :impuesto, :total, :totalPagar,
-      :estado, :parser, :ocrConfidence, :ocrDuration, :archivo, :textoOcr, :userId, ${nowCreated}, ${nowCreated}
+      :estado, :parser, :ocrConfidence, :ocrDuration, :archivo, :textoOcr, :userId, ${now}, ${now}
     )`,
     {
       id: facturaId,
@@ -175,8 +193,18 @@ async function guardarFacturaCompleta(req: AuthenticatedRequest, factura: Factur
   return facturaId;
 }
 
+/**
+ * Inserta en PCELULAR.CARGARARCH (tabla del sistema ETECSA principal).
+ * Solo disponible cuando el motor es Oracle, donde esa tabla existe.
+ * En SQL Server / SQLite devolvemos un array vacio para mantener la
+ * forma del contrato del endpoint.
+ */
 async function guardarEnCargararch(factura: FacturaExtraida) {
-  const fechaExpr = getDbMode() === "oracle" ? "SYSDATE" : "datetime('now')";
+  if (!isOracleLegacyTablesAvailable()) {
+    return [] as string[];
+  }
+
+  const fechaExpr = nowExpr();
   const guardados: string[] = [];
 
   for (const servicio of factura.servicios) {
@@ -204,6 +232,10 @@ async function guardarEnCargararch(factura: FacturaExtraida) {
 }
 
 async function enriquecerLineas(guardados: string[]) {
+  if (!isOracleLegacyTablesAvailable()) {
+    return [] as any[];
+  }
+
   const lineasEncontradas: any[] = [];
 
   for (const numero of guardados.slice(0, 30)) {
@@ -324,7 +356,7 @@ export async function handleUploadFactura(req: AuthenticatedRequest, res: Server
 
     return sendJson(res, 200, {
       success: true,
-      message: `Factura procesada: ${guardados.length} servicios guardados en CARGARARCH y ${factura.servicios.length} en SGF_SERVICIOS.`,
+      message: `Factura procesada: ${guardados.length} servicios en CARGARARCH (Oracle), ${factura.servicios.length} en SGF_SERVICIOS.`,
       data: {
         sgfFacturaId,
         factura: {

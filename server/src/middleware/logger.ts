@@ -30,6 +30,24 @@ export async function auditLog(
       return;
     }
 
+    if (getDbMode() === "mssql") {
+      await execute(
+        `INSERT INTO SGF_LOGS (ID, USER_ID, ACCION, ENTIDAD, ENTIDAD_ID, LEVEL, DETALLES, IP_ADDRESS, CREATED_AT)
+         VALUES (:id, :uid, :a, :e, :eid, :n, :d, :ip, SYSUTCDATETIME())`,
+        {
+          id: randomUUID(),
+          uid: req.currentUser?.id || null,
+          a: accion,
+          e: entidad,
+          eid: entidadId,
+          n: nivel,
+          d: detalles.slice(0, 4000),
+          ip: getRequestIp(req),
+        },
+      );
+      return;
+    }
+
     await execute(
       `INSERT INTO SGF_LOGS (ID, USER_ID, ACCION, ENTIDAD, ENTIDAD_ID, NIVEL, DETALLES, IP, CREADO)
        VALUES (:id, :uid, :a, :e, :eid, :n, :d, :ip, datetime('now'))`,

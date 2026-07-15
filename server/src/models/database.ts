@@ -9,11 +9,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, "../../../server-data");
 const DB_PATH = path.join(DATA_DIR, "sgf-data.db");
 
-type DbMode = "oracle" | "sqlite";
+type DbMode = "mssql" | "oracle" | "sqlite";
 
 let db: SqlJsDb | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let oraclePool: any = null;
+let mssqlPool: any = null;
+let mssqlDriver: any = null;
 let mode: DbMode = "sqlite";
 
 function ensureDir() {
@@ -111,12 +113,42 @@ const ORACLE_SCHEMA_INDEXES = [
   `CREATE INDEX IDX_SESIONES_TOKEN ON SGF_SESIONES(SESSION_TOKEN)`
 ];
 
+const MSSQL_SCHEMA_TABLES = [
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SGF_USUARIOS' AND xtype='U') CREATE TABLE SGF_USUARIOS (ID NVARCHAR(36) PRIMARY KEY, USERNAME NVARCHAR(50) NOT NULL UNIQUE, NAME NVARCHAR(200) NOT NULL, ROLE NVARCHAR(20) NOT NULL DEFAULT 'usuario', PASSWORD_HASH NVARCHAR(255) NOT NULL, ACTIVE BIT NOT NULL DEFAULT 1, CREATED_AT DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), UPDATED_AT DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())`,
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SGF_FACTURAS' AND xtype='U') CREATE TABLE SGF_FACTURAS (ID NVARCHAR(36) PRIMARY KEY, CLIENTE NVARCHAR(500) NOT NULL, CUENTA NVARCHAR(500) NULL, NUMERO_CLIENTE NVARCHAR(50) NULL, NUMERO_CUENTA NVARCHAR(50) NULL, NO_FACTURA NVARCHAR(50) NULL, FECHA_EMISION NVARCHAR(30) NULL, FECHA_VENCIMIENTO NVARCHAR(30) NULL, PERIODO_CONSUMO NVARCHAR(60) NULL, CODIGO_PAGO NVARCHAR(30) NULL, MONEDA NVARCHAR(10) NOT NULL DEFAULT 'CUP', NIT NVARCHAR(30) NULL, CUOTA DECIMAL(18,4) NOT NULL DEFAULT 0, CONSUMO DECIMAL(18,4) NOT NULL DEFAULT 0, COMISION DECIMAL(18,4) NOT NULL DEFAULT 0, IMPUESTO DECIMAL(18,4) NOT NULL DEFAULT 0, TOTAL DECIMAL(18,4) NOT NULL DEFAULT 0, TOTAL_PAGAR DECIMAL(18,4) NOT NULL DEFAULT 0, ESTADO NVARCHAR(20) NOT NULL DEFAULT 'pendiente', PARSER NVARCHAR(80) NULL, OCR_CONFIDENCE DECIMAL(5,2) NOT NULL DEFAULT 0, OCR_DURATION INT NOT NULL DEFAULT 0, ARCHIVO NVARCHAR(500) NULL, TEXTO_OCR NVARCHAR(MAX) NULL, USER_ID NVARCHAR(36) NOT NULL, CREATED_AT DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), UPDATED_AT DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())`,
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SGF_SERVICIOS' AND xtype='U') CREATE TABLE SGF_SERVICIOS (ID NVARCHAR(36) PRIMARY KEY, FACTURA_ID NVARCHAR(36) NOT NULL, NUMERO_SERVICIO NVARCHAR(50) NOT NULL, CUOTA DECIMAL(18,4) NOT NULL DEFAULT 0, CONSUMO DECIMAL(18,4) NOT NULL DEFAULT 0, COMISION DECIMAL(18,4) NOT NULL DEFAULT 0, IMPUESTO DECIMAL(18,4) NOT NULL DEFAULT 0, IMPORTE DECIMAL(18,4) NOT NULL DEFAULT 0)`,
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SGF_LOGS' AND xtype='U') CREATE TABLE SGF_LOGS (ID NVARCHAR(36) PRIMARY KEY, USER_ID NVARCHAR(36) NULL, ACCION NVARCHAR(100) NOT NULL, ENTIDAD NVARCHAR(100) NULL, ENTIDAD_ID NVARCHAR(36) NULL, LEVEL NVARCHAR(10) NOT NULL DEFAULT 'info', DETALLES NVARCHAR(MAX) NULL, IP_ADDRESS NVARCHAR(50) NULL, CREATED_AT DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())`,
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SGF_SESIONES' AND xtype='U') CREATE TABLE SGF_SESIONES (ID NVARCHAR(36) PRIMARY KEY, USER_ID NVARCHAR(36) NOT NULL, SESSION_TOKEN NVARCHAR(255) NOT NULL UNIQUE, MACHINE_ID NVARCHAR(200) NULL, IP_ADDRESS NVARCHAR(50) NULL, ACTIVE BIT NOT NULL DEFAULT 1, CREATED_AT DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), EXPIRES_AT DATETIME2 NOT NULL, ENDED_AT DATETIME2 NULL)`,
+];
+
+const MSSQL_SCHEMA_INDEXES = [
+  `IF NOT EXISTS (SELECT * FROM sysindexes WHERE name='IDX_FACTURAS_USER_ID') CREATE INDEX IDX_FACTURAS_USER_ID ON SGF_FACTURAS(USER_ID)`,
+  `IF NOT EXISTS (SELECT * FROM sysindexes WHERE name='IDX_FACTURAS_ESTADO') CREATE INDEX IDX_FACTURAS_ESTADO ON SGF_FACTURAS(ESTADO)`,
+  `IF NOT EXISTS (SELECT * FROM sysindexes WHERE name='IDX_FACTURAS_NO_FACTURA') CREATE INDEX IDX_FACTURAS_NO_FACTURA ON SGF_FACTURAS(NO_FACTURA)`,
+  `IF NOT EXISTS (SELECT * FROM sysindexes WHERE name='IDX_FACTURAS_CREATED_AT') CREATE INDEX IDX_FACTURAS_CREATED_AT ON SGF_FACTURAS(CREATED_AT)`,
+  `IF NOT EXISTS (SELECT * FROM sysindexes WHERE name='IDX_SERVICIOS_FACTURA_ID') CREATE INDEX IDX_SERVICIOS_FACTURA_ID ON SGF_SERVICIOS(FACTURA_ID)`,
+  `IF NOT EXISTS (SELECT * FROM sysindexes WHERE name='IDX_LOGS_USER_ID') CREATE INDEX IDX_LOGS_USER_ID ON SGF_LOGS(USER_ID)`,
+  `IF NOT EXISTS (SELECT * FROM sysindexes WHERE name='IDX_LOGS_CREATED_AT') CREATE INDEX IDX_LOGS_CREATED_AT ON SGF_LOGS(CREATED_AT)`,
+  `IF NOT EXISTS (SELECT * FROM sysindexes WHERE name='IDX_SESIONES_USER_ID') CREATE INDEX IDX_SESIONES_USER_ID ON SGF_SESIONES(USER_ID)`,
+  `IF NOT EXISTS (SELECT * FROM sysindexes WHERE name='IDX_SESIONES_TOKEN') CREATE INDEX IDX_SESIONES_TOKEN ON SGF_SESIONES(SESSION_TOKEN)`,
+];
+
 type OracleRuntimeConfig = {
   user: string;
   password: string;
   host: string;
   port: string | number;
   service: string;
+};
+
+type MssqlRuntimeConfig = {
+  user: string;
+  password: string;
+  server: string;
+  port: string | number;
+  database: string;
+  encrypt?: boolean;
+  trustServerCertificate?: boolean;
 };
 
 const SQLITE_INDEXES = [
@@ -136,18 +168,58 @@ function paramNames(sql: string): string[] {
   return names;
 }
 
+/**
+ * Convierte SQL "abstracto" (con placeholders :name, funciones Oracle como
+ * SYSTIMESTAMP o NVL) al dialecto de cada motor. Solo se aplica cuando NO
+ * estamos en Oracle.
+ */
 function toSqlite(sql: string) {
   let out = sql;
+  out = out.replace(/PCELULAR\.CARGARARCH/gi, "PCELULAR_CARGARARCH");
+  out = out.replace(/PCELULAR\.LINEA_TELEFONICA/gi, "PCELULAR_LINEA_TELEFONICA");
+  out = out.replace(/PCELULAR\.PERSONA/gi, "PCELULAR_PERSONA");
+  out = out.replace(/PCELULAR\.UNIDAD/gi, "PCELULAR_UNIDAD");
+  out = out.replace(/PCELULAR\.ORGANO/gi, "PCELULAR_ORGANO");
   out = out.replace(/PCELULAR\./gi, "PCELULAR_");
   out = out.replace(/SYSTIMESTAMP/gi, "datetime('now')");
+  out = out.replace(/SYSUTCDATETIME\(\)/gi, "datetime('now')");
+  out = out.replace(/GETDATE\(\)/gi, "datetime('now')");
+  out = out.replace(/GETUTCDATE\(\)/gi, "datetime('now')");
   out = out.replace(/SYSDATE/gi, "datetime('now')");
   out = out.replace(/FROM DUAL/gi, "");
+  out = out.replace(/ISNULL\s*\(/gi, "IFNULL(");
   out = out.replace(/NVL\s*\(/gi, "IFNULL(");
   out = out.replace(/TO_CHAR\s*\(\s*([^,]+?)\s*,\s*'[^']*'\s*\)/gi, "$1");
   out = out.replace(/OFFSET\s*:(\w+)\s+ROWS\s+FETCH\s+NEXT\s*:(\w+)\s+ROWS\s+ONLY/gi, "LIMIT :$2 OFFSET :$1");
-  out = out.replace(/INTERVAL\s*'8'\s*HOUR/gi, "'+8 hours'");
+  out = out.replace(/DATEADD\s*\(\s*HOUR\s*,\s*8\s*,\s*GETDATE\(\)\s*\)/gi, "datetime('now','+8 hours')");
+  out = out.replace(/INTERVAL\s*'(\d+)'\s*HOUR/gi, "'+$1 hours'");
   out = out.replace(/:(\w+)/g, "?");
   return out.trim();
+}
+
+/**
+ * Convierte SQL "abstracto" a T-SQL de SQL Server. Las funciones se
+ * sustituyen a sus equivalentes. Los placeholders :name se mantienen
+ * porque mssql los acepta directamente (los convierte a @name).
+ */
+function toMssql(sql: string) {
+  let out = sql;
+  out = out.replace(/PCELULAR\.CARGARARCH/gi, "PCELULAR_CARGARARCH");
+  out = out.replace(/PCELULAR\.LINEA_TELEFONICA/gi, "PCELULAR_LINEA_TELEFONICA");
+  out = out.replace(/PCELULAR\.PERSONA/gi, "PCELULAR_PERSONA");
+  out = out.replace(/PCELULAR\.UNIDAD/gi, "PCELULAR_UNIDAD");
+  out = out.replace(/PCELULAR\.ORGANO/gi, "PCELULAR_ORGANO");
+  out = out.replace(/PCELULAR\./gi, "PCELULAR_");
+  out = out.replace(/SYSTIMESTAMP/gi, "SYSUTCDATETIME()");
+  out = out.replace(/GETDATE\(\)/gi, "SYSUTCDATETIME()");
+  out = out.replace(/SYSDATE/gi, "SYSUTCDATETIME()");
+  out = out.replace(/NVL\s*\(/gi, "ISNULL(");
+  out = out.replace(/TO_CHAR\s*\(\s*([^,]+?)\s*,\s*'[^']*'\s*\)/gi, "CONVERT(VARCHAR(20), $1, 103)");
+  out = out.replace(/INTERVAL\s*'(\d+)'\s*HOUR/gi, "$1 HOUR");
+  out = out.replace(/\s+FROM\s+DUAL/gi, "");
+  out = out.replace(/LIMIT\s+:(\w+)\s+OFFSET\s+:(\w+)/gi, "OFFSET @$2 ROWS FETCH NEXT @$1 ROWS ONLY");
+  out = out.replace(/:(\w+)/g, "@$1");
+  return out;
 }
 
 async function sqliteQuery(sql: string, params: Record<string, any> = {}) {
@@ -172,6 +244,76 @@ async function sqliteExecute(sql: string, params: Record<string, any> = {}) {
   return affected;
 }
 
+/**
+ * Ejecuta una query en SQL Server usando mssql. Los placeholders :name
+ * se convierten a @name (que es el formato nativo de T-SQL).
+ */
+async function mssqlQuery(sql: string, params: Record<string, any> = {}) {
+  if (!mssqlPool) throw new Error("Pool SQL Server no inicializado");
+  const request = mssqlPool.request();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === null || v === undefined) {
+      request.input(k, null);
+    } else if (typeof v === "number") {
+      request.input(k, mssqlDriver.Decimal(18, 4), v);
+    } else if (typeof v === "boolean") {
+      request.input(k, mssqlDriver.Bit, v);
+    } else {
+      request.input(k, mssqlDriver.NVarChar(mssqlDriver.MAX), String(v));
+    }
+  }
+  const converted = toMssql(sql);
+  const result = await request.query(converted);
+  return (result.recordset || []) as any[];
+}
+
+async function mssqlExecute(sql: string, params: Record<string, any> = {}) {
+  if (!mssqlPool) throw new Error("Pool SQL Server no inicializado");
+  const request = mssqlPool.request();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === null || v === undefined) {
+      request.input(k, null);
+    } else if (typeof v === "number") {
+      request.input(k, mssqlDriver.Decimal(18, 4), v);
+    } else if (typeof v === "boolean") {
+      request.input(k, mssqlDriver.Bit, v);
+    } else {
+      request.input(k, mssqlDriver.NVarChar(mssqlDriver.MAX), String(v));
+    }
+  }
+  const converted = toMssql(sql);
+  const result = await request.query(converted);
+  return result.rowsAffected?.[0] ?? 0;
+}
+
+/**
+ * Helpers de expresiones comunes por motor. Se usan en las rutas
+ * para no tener ifs (mode === "oracle") repetidos en cada query.
+ */
+export function nowExpr() {
+  if (mode === "oracle") return "SYSTIMESTAMP";
+  if (mode === "mssql") return "SYSUTCDATETIME()";
+  return "datetime('now')";
+}
+
+export function expireExpr(horas: number) {
+  if (mode === "oracle") return `SYSTIMESTAMP + INTERVAL '${horas}' HOUR`;
+  if (mode === "mssql") return `DATEADD(HOUR, ${horas}, SYSUTCDATETIME())`;
+  return `datetime('now','+${horas} hours')`;
+}
+
+export function paginationExpr(offsetAlias: string, limitAlias: string) {
+  if (mode === "oracle") return `OFFSET :${offsetAlias} ROWS FETCH NEXT :${limitAlias} ROWS ONLY`;
+  if (mode === "mssql") return `OFFSET @${offsetAlias} ROWS FETCH NEXT @${limitAlias} ROWS ONLY`;
+  return `LIMIT :${limitAlias} OFFSET :${offsetAlias}`;
+}
+
+export function nullableCoalesce(...args: string[]) {
+  if (mode === "oracle") return `NVL(${args.join(", ")})`;
+  if (mode === "mssql") return `ISNULL(${args.join(", ")})`;
+  return `IFNULL(${args.join(", ")})`;
+}
+
 async function ensureAdmin() {
   const hash = await bcrypt.hash("123", 12);
   const id = randomUUID();
@@ -185,6 +327,18 @@ async function ensureAdmin() {
       { id, u: "yolexis", n: "Administrador SGF", r: "admin", h: hash },
     );
     console.log("[SGF] Admin Oracle creado: yolexis / 123");
+    return;
+  }
+
+  if (mode === "mssql") {
+    const rows = await query<any>("SELECT ID FROM SGF_USUARIOS WHERE USERNAME = :u", { u: "yolexis" });
+    if (rows.length > 0) return;
+    await execute(
+      `INSERT INTO SGF_USUARIOS (ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT, UPDATED_AT)
+       VALUES (:id, :u, :n, :r, :h, 1, SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      { id, u: "yolexis", n: "Administrador SGF", r: "admin", h: hash },
+    );
+    console.log("[SGF] Admin SQL Server creado: yolexis / 123");
     return;
   }
 
@@ -240,6 +394,18 @@ async function ensureOracleSchema(pool: any) {
   }
 }
 
+async function ensureMssqlSchema(pool: any) {
+  // sql.js-style: cada sentencia IF NOT EXISTS se ejecuta y solo falla
+  // si la condicion no es cierta. Como IF NOT EXISTS usa un SELECT que
+  // no devuelve nada cuando es verdadero, no hay filas que consumir.
+  for (const sql of MSSQL_SCHEMA_TABLES) {
+    await pool.request().query(sql);
+  }
+  for (const sql of MSSQL_SCHEMA_INDEXES) {
+    await pool.request().query(sql);
+  }
+}
+
 export async function connectOracleRuntime(config?: Partial<OracleRuntimeConfig>) {
   const driver = await import('oracledb');
   const nextConfig = {
@@ -250,15 +416,28 @@ export async function connectOracleRuntime(config?: Partial<OracleRuntimeConfig>
     service: String(config?.service || process.env.ORACLE_SERVICE || 'PCELULAR'),
   };
 
-  const nextPool = await driver.default.createPool({
-    user: nextConfig.user,
-    password: nextConfig.password,
-    connectString: `${nextConfig.host}:${nextConfig.port}/${nextConfig.service}`,
-    poolMin: 2,
-    poolMax: 8,
-    poolIncrement: 1,
-    poolTimeout: 30,
-  });
+  const connectTimeoutMs = Number(process.env.ORACLE_CONNECT_TIMEOUT_MS || 5000);
+  let nextPool: any;
+  try {
+    nextPool = await Promise.race([
+      driver.default.createPool({
+        user: nextConfig.user,
+        password: nextConfig.password,
+        connectString: `${nextConfig.host}:${nextConfig.port}/${nextConfig.service}`,
+        poolMin: 2,
+        poolMax: 8,
+        poolIncrement: 1,
+        poolTimeout: 30,
+        connectTimeout: connectTimeoutMs / 1000,
+      }),
+      new Promise<never>((_, reject) => setTimeout(
+        () => reject(new Error(`Timeout conectando a Oracle despues de ${connectTimeoutMs}ms`)),
+        connectTimeoutMs + 1000,
+      )),
+    ]);
+  } catch (error) {
+    throw error;
+  }
 
   try {
     const conn = await nextPool.getConnection();
@@ -288,16 +467,118 @@ export async function connectOracleRuntime(config?: Partial<OracleRuntimeConfig>
   return { ok: true, config: nextConfig };
 }
 
+export async function connectMssqlRuntime(config?: Partial<MssqlRuntimeConfig>) {
+  if (!mssqlDriver) {
+    mssqlDriver = (await import('mssql')).default;
+  }
+
+  const server = String(config?.server || process.env.MSSQL_SERVER || 'localhost');
+  const port = Number(config?.port || process.env.MSSQL_PORT || 1433);
+  const database = String(config?.database || process.env.MSSQL_DATABASE || 'sgf');
+  const user = String(config?.user || process.env.MSSQL_USER || 'sa');
+  const password = String(config?.password || process.env.MSSQL_PASSWORD || '');
+  const encrypt = config?.encrypt !== undefined
+    ? Boolean(config.encrypt)
+    : String(process.env.MSSQL_ENCRYPT || 'false').toLowerCase() === 'true';
+  const trustServerCertificate = config?.trustServerCertificate !== undefined
+    ? Boolean(config.trustServerCertificate)
+    : String(process.env.MSSQL_TRUST_CERT || 'true').toLowerCase() !== 'false';
+
+  const nextConfig = {
+    user, password, server, port, database,
+    options: { encrypt, trustServerCertificate },
+    pool: {
+      max: Number(process.env.MSSQL_POOL_MAX || 10),
+      min: Number(process.env.MSSQL_POOL_MIN || 0),
+      idleTimeoutMillis: Number(process.env.MSSQL_POOL_IDLE_MS || 30000),
+    },
+  };
+
+  const connectTimeoutMs = Number(process.env.MSSQL_CONNECT_TIMEOUT_MS || 5000);
+  let nextPool: any;
+  try {
+    nextPool = await Promise.race([
+      new mssqlDriver.ConnectionPool(nextConfig).connect(),
+      new Promise<never>((_, reject) => setTimeout(
+        () => reject(new Error(`Timeout conectando a SQL Server despues de ${connectTimeoutMs}ms`)),
+        connectTimeoutMs + 1000,
+      )),
+    ]);
+  } catch (error) {
+    throw error;
+  }
+
+  try {
+    await ensureMssqlSchema(nextPool);
+  } catch (error) {
+    try { await nextPool.close(); } catch {}
+    throw error;
+  }
+
+  if (mssqlPool) {
+    try { await mssqlPool.close(); } catch {}
+  }
+
+  mssqlPool = nextPool;
+  process.env.MSSQL_SERVER = server;
+  process.env.MSSQL_PORT = String(port);
+  process.env.MSSQL_DATABASE = database;
+  process.env.MSSQL_USER = user;
+  process.env.MSSQL_PASSWORD = password;
+  process.env.MSSQL_ENCRYPT = String(encrypt);
+  process.env.MSSQL_TRUST_CERT = String(trustServerCertificate);
+  mode = 'mssql';
+  await ensureAdmin();
+  return { ok: true, config: { server, port, database, user } };
+}
+
 export async function initDatabase() {
   ensureDir();
 
-  try {
-    await connectOracleRuntime();
-    console.log("[SGF] Oracle PCELULAR conectado");
-    return { mode: "oracle" as const, ok: true };
-  } catch (error: any) {
-    oraclePool = null;
-    console.log("[SGF] Oracle no disponible, usando SQLite local:", error?.message || "sin detalle");
+  // Respetar DB_TYPE del .env si esta presente.
+  const dbType = String(process.env.DB_TYPE || '').trim().toLowerCase();
+
+  if (dbType === 'mssql') {
+    try {
+      await connectMssqlRuntime();
+      console.log(`[SGF] SQL Server conectado: ${process.env.MSSQL_SERVER}/${process.env.MSSQL_DATABASE}`);
+      return { mode: "mssql" as const, ok: true };
+    } catch (error: any) {
+      console.log("[SGF] SQL Server no disponible:", error?.message || "sin detalle");
+      mssqlPool = null;
+    }
+  } else if (dbType === 'oracle') {
+    try {
+      await connectOracleRuntime();
+      console.log(`[SGF] Oracle PCELULAR conectado`);
+      return { mode: "oracle" as const, ok: true };
+    } catch (error: any) {
+      console.log("[SGF] Oracle no disponible:", error?.message || "sin detalle");
+      oraclePool = null;
+    }
+  } else if (dbType === 'sqlite') {
+    return initSqlite();
+  } else {
+    // Sin DB_TYPE definido: intentar Oracle primero (compatibilidad con
+    // despliegues anteriores), despues SQL Server, y por ultimo SQLite
+    // como fallback de emergencia.
+    try {
+      await connectOracleRuntime();
+      console.log("[SGF] Oracle PCELULAR conectado");
+      return { mode: "oracle" as const, ok: true };
+    } catch (error: any) {
+      console.log("[SGF] Oracle no disponible:", error?.message || "sin detalle");
+      oraclePool = null;
+    }
+
+    try {
+      await connectMssqlRuntime();
+      console.log(`[SGF] SQL Server conectado: ${process.env.MSSQL_SERVER}/${process.env.MSSQL_DATABASE}`);
+      return { mode: "mssql" as const, ok: true };
+    } catch (error: any) {
+      console.log("[SGF] SQL Server no disponible:", error?.message || "sin detalle");
+      mssqlPool = null;
+    }
   }
 
   return initSqlite();
@@ -305,6 +586,17 @@ export async function initDatabase() {
 
 export function getDbMode(): DbMode {
   return mode;
+}
+
+export function isEnterprise(): boolean {
+  return mode === "oracle" || mode === "mssql";
+}
+
+export function isOracleLegacyTablesAvailable(): boolean {
+  // Solo intentamos tocar el esquema PCELULAR.* en Oracle, donde sabemos
+  // que existe. En SQL Server y en SQLite esas tablas no existen y
+  // cualquier intento de INSERT fallaria.
+  return mode === "oracle";
 }
 
 export async function query<T = any>(sql: string, params: Record<string, any> = {}): Promise<T[]> {
@@ -318,6 +610,9 @@ export async function query<T = any>(sql: string, params: Record<string, any> = 
       await conn.close();
     }
   }
+  if (mode === "mssql" && mssqlPool) {
+    return (await mssqlQuery(sql, params)) as T[];
+  }
   return (await sqliteQuery(sql, params)) as T[];
 }
 
@@ -330,6 +625,9 @@ export async function execute(sql: string, params: Record<string, any> = {}): Pr
     } finally {
       await conn.close();
     }
+  }
+  if (mode === "mssql" && mssqlPool) {
+    return mssqlExecute(sql, params);
   }
   return sqliteExecute(sql, params);
 }
@@ -346,6 +644,27 @@ export async function transaction<T>(fn: (conn: any) => Promise<T>): Promise<T> 
       throw error;
     } finally {
       await conn.close();
+    }
+  }
+
+  if (mode === "mssql" && mssqlPool) {
+    if (!mssqlDriver) mssqlDriver = (await import('mssql')).default;
+    const tx = new mssqlDriver.Transaction(mssqlPool);
+    await tx.begin();
+    try {
+      const value = await fn({
+        query: async (sql: string, params: any = {}) => {
+          const request = tx.request();
+          for (const [k, v] of Object.entries(params)) request.input(k, v);
+          const result = await request.query(toMssql(sql));
+          return result.recordset || [];
+        },
+      });
+      await tx.commit();
+      return value;
+    } catch (error) {
+      await tx.rollback();
+      throw error;
     }
   }
 
@@ -382,6 +701,16 @@ export async function pingDb() {
     }
   }
 
+  if (mode === "mssql" && mssqlPool) {
+    const started = Date.now();
+    try {
+      await mssqlPool.request().query("SELECT 1 AS ok");
+      return { ok: true, msg: `SQL Server ${process.env.MSSQL_SERVER || ''} OK`, ms: Date.now() - started };
+    } catch (error: any) {
+      return { ok: false, msg: error.message, ms: Date.now() - started };
+    }
+  }
+
   return { ok: true, msg: `SQLite (${DB_PATH})`, ms: 0 };
 }
 
@@ -395,6 +724,15 @@ export async function closeDb() {
     oraclePool = null;
   }
 
+  if (mssqlPool) {
+    try {
+      await mssqlPool.close();
+    } catch {
+      // ignore
+    }
+    mssqlPool = null;
+  }
+
   if (db) {
     saveDisk();
     db.close();
@@ -403,3 +741,8 @@ export async function closeDb() {
 
   if (saveTimer) clearTimeout(saveTimer);
 }
+
+// Helpers de traduccion SQL expuestos para tests y para scripts
+// externos que quieran validar la conversion a T-SQL o SQLite sin
+// inicializar el pool.
+export { toMssql, toSqlite };

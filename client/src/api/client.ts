@@ -278,6 +278,25 @@ export const deleteFactura = (id: string) => req("DELETE", `/api/facturas/${enco
 export const getFacturaStats = () => req<Record<string, unknown>>("GET", "/api/facturas/stats");
 export const uploadFactura = (filename: string, base64: string, options?: { forceDuplicate?: boolean }) => req("POST", "/api/facturas/upload", { filename, file: base64, forceDuplicate: options?.forceDuplicate });
 
+// --- Migracion desde SQLite local ---
+export type SqliteMigrationInfo = {
+  currentMode: string;
+  sqlitePath: string;
+  sqliteExists: boolean;
+  sqliteInfo: { usuarios: number; sesiones: number; facturas: number; servicios: number; logs: number } | null;
+};
+
+export async function getMigrateStatus() {
+  return req<SqliteMigrationInfo>("GET", "/api/db/migrate/status");
+}
+
+export async function migrateFromSqlite() {
+  return req<{ copied: { usuarios: number; facturas: number; servicios: number; logs: number; sesiones: number }; errorCount: number }>(
+    "POST",
+    "/api/db/migrate/from-sqlite",
+  );
+}
+
 export async function getUsers() {
   const response = await req<User[]>("GET", "/api/users");
   if (response.success && Array.isArray(response.data)) response.data = response.data.map(normalizeUser);

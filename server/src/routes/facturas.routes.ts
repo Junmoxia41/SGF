@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
-import { execute, getDbMode, query, transaction } from "../models/database.js";
+import {
+  execute,
+  getDbMode,
+  isOracleLegacyTablesAvailable,
+  nowExpr,
+  paginationExpr,
+  query,
+  transaction,
+} from "../models/database.js";
 import { unpackStoredFacturaText } from "../utils/factura-parser.js";
 import { sendJson, readJsonBody, requireAdmin } from "../middleware/auth.js";
 import { auditLog } from "../middleware/logger.js";
@@ -125,9 +133,10 @@ function normalizeIncomingServices(body: any) {
 
 async function syncCargararch(noFactura: string, cliente: string, servicios: ReturnType<typeof normalizeIncomingServices>) {
   if (!servicios.length) return;
+  if (!isOracleLegacyTablesAvailable()) return;
 
   const tira = `Factura ${noFactura || "SIN-NO-FACTURA"} - ${(cliente || "Cliente").slice(0, 40)}`;
-  const fechaExpr = getDbMode() === "oracle" ? "SYSDATE" : "datetime('now')";
+  const fechaExpr = nowExpr();
 
   for (const servicio of servicios) {
     await execute(
@@ -156,15 +165,10 @@ export async function handleGetFacturas(req: AuthenticatedRequest, res: ServerRe
     const countRows = await query<any>(`SELECT COUNT(*) AS CNT FROM SGF_FACTURAS f ${where}`, params);
     const total = Number(countRows[0]?.CNT || 0);
 
-    const sql = getDbMode() === "oracle"
-      ? `SELECT f.*, (SELECT COUNT(*) FROM SGF_SERVICIOS s WHERE s.FACTURA_ID = f.ID) AS SERVICIOS_COUNT
+    const sql = `SELECT f.*, (SELECT COUNT(*) FROM SGF_SERVICIOS s WHERE s.FACTURA_ID = f.ID) AS SERVICIOS_COUNT
          FROM SGF_FACTURAS f ${where}
          ORDER BY f.CREATED_AT DESC
-         OFFSET :off ROWS FETCH NEXT :lim ROWS ONLY`
-      : `SELECT f.*, (SELECT COUNT(*) FROM SGF_SERVICIOS s WHERE s.FACTURA_ID = f.ID) AS SERVICIOS_COUNT
-         FROM SGF_FACTURAS f ${where}
-         ORDER BY f.CREATED_AT DESC
-         LIMIT :lim OFFSET :off`;
+         ${paginationExpr("off", "lim")}`;
 
     const rows = await query<any>(sql, { ...params, off: offset, lim: pageSize });
     return sendJson(res, 200, {
@@ -213,6 +217,7 @@ export async function handleCreateFactura(req: AuthenticatedRequest, res: Server
   const servicios = normalizeIncomingServices(body);
 
   try {
+    const now = nowExpr();
     await transaction(async () => {
       await execute(
         `INSERT INTO SGF_FACTURAS (
@@ -225,8 +230,7 @@ export async function handleCreateFactura(req: AuthenticatedRequest, res: Server
           :fechaEmision, :fechaVencimiento, :periodoConsumo, :codigoPago,
           :moneda, :nit, :cuota, :consumo, :comision, :impuesto, :total, :totalPagar,
           :estado, :parser, :ocrConfidence, :ocrDuration, :archivo, :textoOcr, :userId,
-          ${getDbMode() === "oracle" ? "SYSTIMESTAMP" : "datetime('now')"},
-          ${getDbMode() === "oracle" ? "SYSTIMESTAMP" : "datetime('now')"}
+          ${now}, ${now}
         )`,
         {
           id: facturaId,
@@ -352,7 +356,7 @@ export async function handleUpdateFactura(req: AuthenticatedRequest, res: Server
           TOTAL_PAGAR = :total_pagar,
           ESTADO = :estado,
           ARCHIVO = :archivo,
-          UPDATED_AT = ${getDbMode() === "oracle" ? "SYSTIMESTAMP" : "datetime('now')"}
+          UPDATED_AT = ${nowExpr()}
          WHERE ID = :id`,
         {
           id: facturaId,
@@ -405,8 +409,12 @@ export async function handleDeleteFactura(req: AuthenticatedRequest, res: Server
     const noFactura = String(rows[0]?.NO_FACTURA ?? rows[0]?.no_factura ?? "");
     await execute(`DELETE FROM SGF_SERVICIOS WHERE FACTURA_ID = :id`, { id: facturaId });
     await execute(`DELETE FROM SGF_FACTURAS WHERE ID = :id`, { id: facturaId });
-    if (noFactura) {
-      await execute(`DELETE FROM PCELULAR.CARGARARCH WHERE TIRA LIKE :t`, { t: `Factura ${noFactura}%` });
+    if (noFactura && isOracleLegacyTablesAvailable()) {
+      try {
+        await execute(`DELETE FROM PCELULAR.CARGARARCH WHERE TIRA LIKE :t`, { t: `Factura ${noFactura}%` });
+      } catch (error: any) {
+        console.warn(`[SGF] No se pudo limpiar PCELULAR.CARGARARCH: ${error.message}`);
+      }
     }
 
     await auditLog(req, "eliminar_factura", "factura", facturaId, "warn", `Factura ${noFactura || facturaId} eliminada.`);
@@ -418,17 +426,7 @@ export async function handleDeleteFactura(req: AuthenticatedRequest, res: Server
 
 export async function handleFacturaStats(req: AuthenticatedRequest, res: ServerResponse) {
   try {
-    const totalQuery = getDbMode() === "oracle"
-      ? `SELECT
-            COUNT(*) AS TOTAL,
-            SUM(TOTAL_PAGAR) AS MONTO_TOTAL,
-            AVG(TOTAL_PAGAR) AS PROMEDIO,
-            SUM(CASE WHEN ESTADO = 'procesado' THEN 1 ELSE 0 END) AS PROCESADAS,
-            SUM(CASE WHEN ESTADO = 'pendiente' THEN 1 ELSE 0 END) AS PENDIENTES,
-            SUM(CASE WHEN ESTADO = 'error' THEN 1 ELSE 0 END) AS ERRORES,
-            TO_CHAR(MAX(CREATED_AT), 'DD/MM/YYYY HH24:MI') AS ULTIMA_FECHA
-         FROM SGF_FACTURAS`
-      : `SELECT
+    const totalQuery = `SELECT
             COUNT(*) AS TOTAL,
             SUM(TOTAL_PAGAR) AS MONTO_TOTAL,
             AVG(TOTAL_PAGAR) AS PROMEDIO,

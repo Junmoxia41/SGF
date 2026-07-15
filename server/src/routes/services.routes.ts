@@ -1,5 +1,5 @@
 import type { ServerResponse } from "node:http";
-import { getDbMode, query } from "../models/database.js";
+import { getDbMode, paginationExpr, query } from "../models/database.js";
 import { sendJson } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 
@@ -55,16 +55,15 @@ export async function handleSearchServicios(req: AuthenticatedRequest, res: Serv
     const countRows = await query<any>(countSql, params);
     const total = Number(countRows[0]?.CNT || 0);
 
-    const listSql = getDbMode() === "oracle"
-      ? `SELECT
+    const listSql = `SELECT
             s.ID AS SERVICE_ID,
             s.FACTURA_ID,
             s.NUMERO_SERVICIO,
             s.CUOTA AS SERVICE_CUOTA,
             s.CONSUMO AS SERVICE_CONSUMO,
             s.COMISION AS SERVICE_COMISION,
-            s.IMPUESTO AS SERVICE_IMPUESTO,
             s.IMPORTE AS SERVICE_IMPORTE,
+            s.IMPUESTO AS SERVICE_IMPUESTO,
             f.NO_FACTURA,
             f.CLIENTE,
             f.PERIODO_CONSUMO,
@@ -76,28 +75,7 @@ export async function handleSearchServicios(req: AuthenticatedRequest, res: Serv
           JOIN SGF_FACTURAS f ON f.ID = s.FACTURA_ID
           ${where}
           ORDER BY f.CREATED_AT DESC, s.NUMERO_SERVICIO ASC
-          OFFSET :off ROWS FETCH NEXT :lim ROWS ONLY`
-      : `SELECT
-            s.ID AS SERVICE_ID,
-            s.FACTURA_ID,
-            s.NUMERO_SERVICIO,
-            s.CUOTA AS SERVICE_CUOTA,
-            s.CONSUMO AS SERVICE_CONSUMO,
-            s.COMISION AS SERVICE_COMISION,
-            s.IMPUESTO AS SERVICE_IMPUESTO,
-            s.IMPORTE AS SERVICE_IMPORTE,
-            f.NO_FACTURA,
-            f.CLIENTE,
-            f.PERIODO_CONSUMO,
-            f.TOTAL_PAGAR,
-            f.ESTADO,
-            f.CREATED_AT,
-            f.OCR_CONFIDENCE
-          FROM SGF_SERVICIOS s
-          JOIN SGF_FACTURAS f ON f.ID = s.FACTURA_ID
-          ${where}
-          ORDER BY f.CREATED_AT DESC, s.NUMERO_SERVICIO ASC
-          LIMIT :lim OFFSET :off`;
+          ${paginationExpr("off", "lim")}`;
 
     const rows = await query<any>(listSql, { ...params, off: offset, lim: pageSize });
     return sendJson(res, 200, {

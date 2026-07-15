@@ -39,6 +39,17 @@ export const SECURITY_CONFIG = {
   trustProxy: String(process.env.TRUST_PROXY || "").trim(),
 };
 
+export const DB_TYPE_CONFIG = {
+  /**
+   * Tipo de BD a usar al arrancar. Opciones:
+   *   - "sqlite"  -> BD local (archivo .db en server-data/)
+   *   - "oracle"  -> Oracle PCELULAR (requiere host, user, password, service)
+   *   - "mssql"   -> Microsoft SQL Server (requiere server, database, user, password)
+   * Si esta vacio, se intenta Oracle -> SQL Server -> SQLite en ese orden.
+   */
+  type: String(process.env.DB_TYPE || "").trim().toLowerCase(),
+};
+
 export const ORACLE_CONFIG = {
   user: process.env.ORACLE_USER || "pcelular",
   password: process.env.ORACLE_PASSWORD || "pcelular",
@@ -53,5 +64,20 @@ export const ORACLE_CONFIG = {
     max: Number(process.env.ORACLE_POOL_MAX) || 20,
     increment: Number(process.env.ORACLE_POOL_INCREMENT) || 2,
     timeout: Number(process.env.ORACLE_POOL_TIMEOUT) || 60,
+  },
+};
+
+export const MSSQL_CONFIG = {
+  user: process.env.MSSQL_USER || "sa",
+  password: process.env.MSSQL_PASSWORD || "",
+  server: process.env.MSSQL_SERVER || "localhost",
+  port: Number(process.env.MSSQL_PORT) || 1433,
+  database: process.env.MSSQL_DATABASE || "sgf",
+  encrypt: String(process.env.MSSQL_ENCRYPT || "false").toLowerCase() === "true",
+  trustServerCertificate: String(process.env.MSSQL_TRUST_CERT || "true").toLowerCase() !== "false",
+  pool: {
+    min: Number(process.env.MSSQL_POOL_MIN) || 0,
+    max: Number(process.env.MSSQL_POOL_MAX) || 10,
+    idleTimeoutMs: Number(process.env.MSSQL_POOL_IDLE_MS) || 30000,
   },
 };

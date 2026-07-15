@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
 import bcrypt from "bcryptjs";
-import { execute, getDbMode, query } from "../models/database.js";
+import { execute, expireExpr, getDbMode, nowExpr, query } from "../models/database.js";
 import { signToken } from "../utils/jwt.js";
 import {
   checkRateLimit,
@@ -122,7 +122,14 @@ export async function handleLogin(req: AuthenticatedRequest, res: ServerResponse
       await execute(`UPDATE SGF_SESIONES SET ACTIVE = 0, ENDED_AT = SYSTIMESTAMP WHERE USER_ID = :uid AND ACTIVE = 1`, { uid: internal.id });
       await execute(
         `INSERT INTO SGF_SESIONES (ID, USER_ID, SESSION_TOKEN, MACHINE_ID, IP_ADDRESS, ACTIVE, CREATED_AT, EXPIRES_AT)
-         VALUES (:id, :uid, :tok, :m, :ip, 1, SYSTIMESTAMP, SYSTIMESTAMP + INTERVAL '8' HOUR)`,
+         VALUES (:id, :uid, :tok, :m, :ip, 1, ${nowExpr()}, ${expireExpr(8)})`,
+        { id: sessionId, uid: internal.id, tok: token, m: machineId, ip },
+      );
+    } else if (dbMode === "mssql") {
+      await execute(`UPDATE SGF_SESIONES SET ACTIVE = 0, ENDED_AT = SYSUTCDATETIME() WHERE USER_ID = :uid AND ACTIVE = 1`, { uid: internal.id });
+      await execute(
+        `INSERT INTO SGF_SESIONES (ID, USER_ID, SESSION_TOKEN, MACHINE_ID, IP_ADDRESS, ACTIVE, CREATED_AT, EXPIRES_AT)
+         VALUES (:id, :uid, :tok, :m, :ip, 1, ${nowExpr()}, ${expireExpr(8)})`,
         { id: sessionId, uid: internal.id, tok: token, m: machineId, ip },
       );
     } else {
@@ -160,8 +167,11 @@ export async function handleLogout(req: AuthenticatedRequest, res: ServerRespons
     : "";
 
   try {
-    if (getDbMode() === "oracle") {
+    const dbMode = getDbMode();
+    if (dbMode === "oracle") {
       await execute(`UPDATE SGF_SESIONES SET ACTIVE = 0, ENDED_AT = SYSTIMESTAMP WHERE SESSION_TOKEN = :t`, { t: token });
+    } else if (dbMode === "mssql") {
+      await execute(`UPDATE SGF_SESIONES SET ACTIVE = 0, ENDED_AT = SYSUTCDATETIME() WHERE SESSION_TOKEN = :t`, { t: token });
     } else {
       await execute(`UPDATE SGF_SESIONES SET ACTIVO = 0 WHERE TOKEN = :t`, { t: token });
     }

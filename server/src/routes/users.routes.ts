@@ -66,6 +66,12 @@ export async function handleCreateUser(req: AuthenticatedRequest, res: ServerRes
          VALUES (:id, :u, :n, :r, :h, 1, SYSTIMESTAMP, SYSTIMESTAMP)`,
         { id, u: username, n: name, r: role, h: passwordHash },
       );
+    } else if (getDbMode() === "mssql") {
+      await execute(
+        `INSERT INTO SGF_USUARIOS (ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT, UPDATED_AT)
+         VALUES (:id, :u, :n, :r, :h, 1, SYSUTCDATETIME(), SYSUTCDATETIME())`,
+        { id, u: username, n: name, r: role, h: passwordHash },
+      );
     } else {
       await execute(
         `INSERT INTO SGF_USUARIOS (ID, USERNAME, NOMBRE, ROL, PASSWORD_HASH, ACTIVO, CREADO)
@@ -118,6 +124,8 @@ export async function handleUpdateUser(req: AuthenticatedRequest, res: ServerRes
     }
     if (dbMode === "oracle") {
       sets.push(`UPDATED_AT = SYSTIMESTAMP`);
+    } else if (dbMode === "mssql") {
+      sets.push(`UPDATED_AT = SYSUTCDATETIME()`);
     }
 
     if (sets.length === 0) {

@@ -21,6 +21,7 @@ import { handleClearLogs, handleGetLogs } from "./routes/logs.routes.js";
 import { handleSearchServicios } from "./routes/services.routes.js";
 import { handleUploadFactura } from "./routes/upload.routes.js";
 import { handleCreateUser, handleDeleteUser, handleGetUsers, handleUpdateUser } from "./routes/users.routes.js";
+import { handleMigrateFromSqlite, handleMigrateStatus } from "./routes/migrate.routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIST_DIR = path.resolve(__dirname, "../../client/dist");
@@ -145,6 +146,9 @@ const server = http.createServer(
 
       if (requestPath === "/api/logs" && req.method === "GET") return handleGetLogs(req, res, url);
       if (requestPath === "/api/logs" && req.method === "DELETE") return handleClearLogs(req, res);
+
+      if (requestPath === "/api/db/migrate/status" && req.method === "GET") return handleMigrateStatus(req, res);
+      if (requestPath === "/api/db/migrate/from-sqlite" && req.method === "POST") return handleMigrateFromSqlite(req, res);
 
       return sendJson(res, 404, { success: false, error: "Ruta no encontrada." });
     } catch (error: any) {

@@ -2,14 +2,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ServerResponse } from "node:http";
-import { connectOracleRuntime, getDbMode } from "../models/database.js";
+import {
+  connectMssqlRuntime,
+  connectOracleRuntime,
+  getDbMode,
+} from "../models/database.js";
 import { sendJson, readJsonBody, requireAdmin } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENV_PATH = path.resolve(__dirname, "../../.env");
 
+type DbType = "oracle" | "mssql" | "sqlite";
+
 type OracleConnectPayload = {
+  type: "oracle";
   host: string;
   port: string;
   service: string;
@@ -17,69 +24,112 @@ type OracleConnectPayload = {
   password: string;
 };
 
+type MssqlConnectPayload = {
+  type: "mssql";
+  server: string;
+  port: string;
+  database: string;
+  user: string;
+  password: string;
+  encrypt?: boolean;
+  trustServerCertificate?: boolean;
+};
+
+type TestPayload = OracleConnectPayload | MssqlConnectPayload;
+
 function currentConfig() {
   return {
+    dbType: String(process.env.DB_TYPE || getDbMode()).toLowerCase() || "sqlite",
     oracleUser: process.env.ORACLE_USER || "pcelular",
     oracleHost: process.env.ORACLE_HOST || "25",
     oraclePort: process.env.ORACLE_PORT || "1521",
     oracleService: process.env.ORACLE_SERVICE || "PCELULAR",
+    mssqlUser: process.env.MSSQL_USER || "sa",
+    mssqlServer: process.env.MSSQL_SERVER || "localhost",
+    mssqlPort: process.env.MSSQL_PORT || "1433",
+    mssqlDatabase: process.env.MSSQL_DATABASE || "sgf",
+    mssqlEncrypt: String(process.env.MSSQL_ENCRYPT || "false").toLowerCase() === "true",
+    mssqlTrustCert: String(process.env.MSSQL_TRUST_CERT || "true").toLowerCase() !== "false",
     httpPort: process.env.PORT || "3000",
     dbMode: getDbMode(),
   };
 }
 
-function saveEnvConfig(config: OracleConnectPayload) {
-  const current = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, "utf8") : "";
-  const lines = current.split(/\r?\n/).filter(Boolean);
-  const map = new Map<string, string>();
+const ENV_KEYS_ORDER = [
+  "DB_TYPE",
+  "PORT",
+  "HOST",
+  "ORACLE_USER",
+  "ORACLE_PASSWORD",
+  "ORACLE_HOST",
+  "ORACLE_PORT",
+  "ORACLE_SERVICE",
+  "ORACLE_POOL_MIN",
+  "ORACLE_POOL_MAX",
+  "ORACLE_POOL_INCREMENT",
+  "ORACLE_POOL_TIMEOUT",
+  "MSSQL_USER",
+  "MSSQL_PASSWORD",
+  "MSSQL_SERVER",
+  "MSSQL_PORT",
+  "MSSQL_DATABASE",
+  "MSSQL_ENCRYPT",
+  "MSSQL_TRUST_CERT",
+  "MSSQL_POOL_MIN",
+  "MSSQL_POOL_MAX",
+  "MSSQL_POOL_IDLE_MS",
+  "JWT_SECRET",
+  "JWT_EXPIRES_IN",
+  "REQUEST_TIMEOUT_MS",
+  "MAX_FILE_SIZE_MB",
+  "LOGIN_RATE_PER_MIN",
+  "LOGIN_RATE_PER_15MIN",
+  "TRUST_PROXY",
+];
 
-  for (const line of lines) {
-    if (!line.includes("=")) continue;
+function readEnvMap(): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!fs.existsSync(ENV_PATH)) return map;
+  const text = fs.readFileSync(ENV_PATH, "utf8");
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.includes("=") || line.trimStart().startsWith("#")) continue;
     const idx = line.indexOf("=");
     const key = line.slice(0, idx).trim();
     const value = line.slice(idx + 1);
     map.set(key, value);
   }
+  return map;
+}
 
-  map.set("PORT", map.get("PORT") || "3000");
-  map.set("HOST", map.get("HOST") || "0.0.0.0");
-  map.set("ORACLE_USER", config.user);
-  map.set("ORACLE_PASSWORD", config.password);
-  map.set("ORACLE_HOST", config.host);
-  map.set("ORACLE_PORT", config.port);
-  map.set("ORACLE_SERVICE", config.service);
-  map.set("ORACLE_POOL_MIN", map.get("ORACLE_POOL_MIN") || "2");
-  map.set("ORACLE_POOL_MAX", map.get("ORACLE_POOL_MAX") || "20");
-  map.set("ORACLE_POOL_INCREMENT", map.get("ORACLE_POOL_INCREMENT") || "2");
-  map.set("ORACLE_POOL_TIMEOUT", map.get("ORACLE_POOL_TIMEOUT") || "60");
-  map.set("JWT_SECRET", map.get("JWT_SECRET") || "sgf-jwt-secret-cambiar-en-produccion");
-  map.set("JWT_EXPIRES_IN", map.get("JWT_EXPIRES_IN") || "8h");
-  map.set("REQUEST_TIMEOUT_MS", map.get("REQUEST_TIMEOUT_MS") || "30000");
-  map.set("MAX_FILE_SIZE_MB", map.get("MAX_FILE_SIZE_MB") || "10");
+function saveEnvConfig(values: Record<string, string | undefined>) {
+  const map = readEnvMap();
+  for (const [k, v] of Object.entries(values)) {
+    if (v !== undefined) map.set(k, v);
+  }
+  // Garantizar defaults razonables
+  if (!map.get("DB_TYPE")) map.set("DB_TYPE", "");
+  if (!map.get("PORT")) map.set("PORT", "3000");
+  if (!map.get("HOST")) map.set("HOST", "0.0.0.0");
+  if (!map.get("JWT_SECRET")) map.set("JWT_SECRET", "sgf-jwt-secret-cambiar-en-produccion");
+  if (!map.get("JWT_EXPIRES_IN")) map.set("JWT_EXPIRES_IN", "8h");
+  if (!map.get("REQUEST_TIMEOUT_MS")) map.set("REQUEST_TIMEOUT_MS", "30000");
+  if (!map.get("MAX_FILE_SIZE_MB")) map.set("MAX_FILE_SIZE_MB", "10");
+  if (!map.get("LOGIN_RATE_PER_MIN")) map.set("LOGIN_RATE_PER_MIN", "5");
+  if (!map.get("LOGIN_RATE_PER_15MIN")) map.set("LOGIN_RATE_PER_15MIN", "30");
+  if (!map.get("ORACLE_POOL_MIN")) map.set("ORACLE_POOL_MIN", "2");
+  if (!map.get("ORACLE_POOL_MAX")) map.set("ORACLE_POOL_MAX", "20");
+  if (!map.get("ORACLE_POOL_INCREMENT")) map.set("ORACLE_POOL_INCREMENT", "2");
+  if (!map.get("ORACLE_POOL_TIMEOUT")) map.set("ORACLE_POOL_TIMEOUT", "60");
+  if (!map.get("MSSQL_POOL_MIN")) map.set("MSSQL_POOL_MIN", "0");
+  if (!map.get("MSSQL_POOL_MAX")) map.set("MSSQL_POOL_MAX", "10");
+  if (!map.get("MSSQL_POOL_IDLE_MS")) map.set("MSSQL_POOL_IDLE_MS", "30000");
 
-  const orderedKeys = [
-    "PORT",
-    "HOST",
-    "ORACLE_USER",
-    "ORACLE_PASSWORD",
-    "ORACLE_HOST",
-    "ORACLE_PORT",
-    "ORACLE_SERVICE",
-    "ORACLE_POOL_MIN",
-    "ORACLE_POOL_MAX",
-    "ORACLE_POOL_INCREMENT",
-    "ORACLE_POOL_TIMEOUT",
-    "JWT_SECRET",
-    "JWT_EXPIRES_IN",
-    "REQUEST_TIMEOUT_MS",
-    "MAX_FILE_SIZE_MB",
-  ];
-
-  const content = orderedKeys.map((key) => `${key}=${map.get(key) || ""}`).join("\n") + "\n";
+  const content =
+    ENV_KEYS_ORDER.map((k) => `${k}=${map.get(k) ?? ""}`).join("\n") + "\n";
   fs.writeFileSync(ENV_PATH, content, "utf8");
 }
 
-async function testOracleConnection(config: OracleConnectPayload) {
+async function testOracle(config: OracleConnectPayload) {
   try {
     const oracledb = await import("oracledb");
     const conn = await oracledb.default.getConnection({
@@ -99,6 +149,7 @@ async function testOracleConnection(config: OracleConnectPayload) {
       success: true,
       message: "Conexion Oracle valida.",
       data: {
+        type: "oracle" as const,
         host: config.host,
         port: config.port,
         service: config.service,
@@ -112,12 +163,64 @@ async function testOracleConnection(config: OracleConnectPayload) {
       success: false,
       message: `Error de conexion: ${error.message}`,
       data: {
+        type: "oracle" as const,
         host: config.host,
         port: config.port,
         service: config.service,
         user: config.user,
         latencyMs: 0,
-        tables: [],
+        tables: [] as string[],
+      },
+    };
+  }
+}
+
+async function testMssql(config: MssqlConnectPayload) {
+  try {
+    const mssql = await import("mssql");
+    const pool = await new mssql.default.ConnectionPool({
+      user: config.user,
+      password: config.password,
+      server: config.server,
+      port: Number(config.port) || 1433,
+      database: config.database,
+      options: {
+        encrypt: config.encrypt ?? false,
+        trustServerCertificate: config.trustServerCertificate ?? true,
+      },
+    }).connect();
+    const started = Date.now();
+    const result = await pool.request().query("SELECT 1 AS ok");
+    const latency = Date.now() - started;
+    const tables = await pool.request().query(
+      "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME LIKE 'SGF\\_%' ESCAPE '\\\\' ORDER BY TABLE_NAME",
+    );
+    await pool.close();
+    return {
+      success: true,
+      message: "Conexion SQL Server valida.",
+      data: {
+        type: "mssql" as const,
+        server: config.server,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+        latencyMs: latency,
+        tables: (tables.recordset || []).map((row: any) => row.TABLE_NAME),
+      },
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `Error de conexion: ${error.message}`,
+      data: {
+        type: "mssql" as const,
+        server: config.server,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+        latencyMs: 0,
+        tables: [] as string[],
       },
     };
   }
@@ -135,18 +238,32 @@ export async function handleDbTest(req: AuthenticatedRequest, res: ServerRespons
     return sendJson(res, 400, { success: false, error: "JSON invalido." });
   }
 
-  const payload: OracleConnectPayload = {
+  const type = (String(body.type || "oracle").toLowerCase()) as DbType;
+
+  if (type === "mssql") {
+    const config: MssqlConnectPayload = {
+      type: "mssql",
+      server: String(body.server || process.env.MSSQL_SERVER || "localhost").trim(),
+      port: String(body.port || process.env.MSSQL_PORT || "1433").trim(),
+      database: String(body.database || process.env.MSSQL_DATABASE || "sgf").trim(),
+      user: String(body.user || process.env.MSSQL_USER || "sa").trim(),
+      password: String(body.password || process.env.MSSQL_PASSWORD || "").trim(),
+      encrypt: body.encrypt !== undefined ? Boolean(body.encrypt) : undefined,
+      trustServerCertificate: body.trustServerCertificate !== undefined ? Boolean(body.trustServerCertificate) : undefined,
+    };
+    return sendJson(res, 200, await testMssql(config));
+  }
+
+  // default: oracle
+  const config: OracleConnectPayload = {
+    type: "oracle",
     host: String(body.host || process.env.ORACLE_HOST || "25").trim(),
     port: String(body.port || process.env.ORACLE_PORT || "1521").trim(),
     service: String(body.service || process.env.ORACLE_SERVICE || "PCELULAR").trim(),
     user: String(body.user || process.env.ORACLE_USER || "pcelular").trim(),
     password: String(body.password || process.env.ORACLE_PASSWORD || "pcelular").trim(),
   };
-
-  const started = Date.now();
-  const result = await testOracleConnection(payload);
-  result.data.latencyMs = Date.now() - started;
-  return sendJson(res, 200, result);
+  return sendJson(res, 200, await testOracle(config));
 }
 
 export async function handleDbConnect(req: AuthenticatedRequest, res: ServerResponse) {
@@ -159,20 +276,63 @@ export async function handleDbConnect(req: AuthenticatedRequest, res: ServerResp
     return sendJson(res, 400, { success: false, error: "JSON invalido." });
   }
 
-  const payload: OracleConnectPayload = {
-    host: String(body.host || process.env.ORACLE_HOST || "25").trim(),
-    port: String(body.port || process.env.ORACLE_PORT || "1521").trim(),
-    service: String(body.service || process.env.ORACLE_SERVICE || "PCELULAR").trim(),
-    user: String(body.user || process.env.ORACLE_USER || "pcelular").trim(),
-    password: String(body.password || process.env.ORACLE_PASSWORD || "pcelular").trim(),
-  };
+  const type = (String(body.type || "oracle").toLowerCase()) as DbType;
 
   try {
-    saveEnvConfig(payload);
+    if (type === "mssql") {
+      const payload: MssqlConnectPayload = {
+        type: "mssql",
+        server: String(body.server || process.env.MSSQL_SERVER || "localhost").trim(),
+        port: String(body.port || process.env.MSSQL_PORT || "1433").trim(),
+        database: String(body.database || process.env.MSSQL_DATABASE || "sgf").trim(),
+        user: String(body.user || process.env.MSSQL_USER || "sa").trim(),
+        password: String(body.password || process.env.MSSQL_PASSWORD || "").trim(),
+        encrypt: body.encrypt !== undefined ? Boolean(body.encrypt) : undefined,
+        trustServerCertificate: body.trustServerCertificate !== undefined ? Boolean(body.trustServerCertificate) : undefined,
+      };
+      saveEnvConfig({
+        DB_TYPE: "mssql",
+        MSSQL_SERVER: payload.server,
+        MSSQL_PORT: payload.port,
+        MSSQL_DATABASE: payload.database,
+        MSSQL_USER: payload.user,
+        MSSQL_PASSWORD: payload.password,
+        MSSQL_ENCRYPT: String(payload.encrypt ?? false),
+        MSSQL_TRUST_CERT: String(payload.trustServerCertificate ?? true),
+      });
+      await connectMssqlRuntime(payload);
+      return sendJson(res, 200, {
+        success: true,
+        message: `Conectado a SQL Server ${payload.server}/${payload.database}. Debe iniciar sesion nuevamente.`,
+        data: {
+          connected: true,
+          mode: getDbMode(),
+          config: currentConfig(),
+        },
+      });
+    }
+
+    // default: oracle
+    const payload: OracleConnectPayload = {
+      type: "oracle",
+      host: String(body.host || process.env.ORACLE_HOST || "25").trim(),
+      port: String(body.port || process.env.ORACLE_PORT || "1521").trim(),
+      service: String(body.service || process.env.ORACLE_SERVICE || "PCELULAR").trim(),
+      user: String(body.user || process.env.ORACLE_USER || "pcelular").trim(),
+      password: String(body.password || process.env.ORACLE_PASSWORD || "pcelular").trim(),
+    };
+    saveEnvConfig({
+      DB_TYPE: "oracle",
+      ORACLE_HOST: payload.host,
+      ORACLE_PORT: payload.port,
+      ORACLE_SERVICE: payload.service,
+      ORACLE_USER: payload.user,
+      ORACLE_PASSWORD: payload.password,
+    });
     await connectOracleRuntime(payload);
     return sendJson(res, 200, {
       success: true,
-      message: `Conectado a Oracle en ${payload.host}:${payload.port}/${payload.service}. Debe iniciar sesion nuevamente para continuar.`,
+      message: `Conectado a Oracle ${payload.host}:${payload.port}/${payload.service}. Debe iniciar sesion nuevamente.`,
       data: {
         connected: true,
         mode: getDbMode(),
@@ -182,7 +342,7 @@ export async function handleDbConnect(req: AuthenticatedRequest, res: ServerResp
   } catch (error: any) {
     return sendJson(res, 500, {
       success: false,
-      error: `No se pudo conectar a Oracle: ${error.message}`,
+      error: `No se pudo conectar (${type}): ${error.message}`,
     });
   }
 }

@@ -10,11 +10,12 @@ pnpm-debug.log*
 .stylelintcache
 
 # --- Builds del proyecto ---
-# server/dist se regenera con 'npx tsc' en cada instalacion (es pequeno
-# y tarda segundos). client/dist se COMITE porque es el artefacto que
-# el modo "anti-ESET" distribuye precompilado para que la maquina
-# final no tenga que ejecutar vite/esbuild (que ESET suele bloquear).
-server/dist/
+# Tanto server/dist/ como client/dist/ se COMITEAN. El paquete portable
+# se distribuye precompilado para que la maquina final (sin internet,
+# con ESET) no tenga que ejecutar nada: ni tsc, ni vite, ni esbuild.
+# Para regenerarlos desde una PC con internet:
+#   cd server && npx tsc
+#   cd client && npx vite build
 
 # --- Datos de runtime (BD local SQLite, etc.) ---
 server-data/

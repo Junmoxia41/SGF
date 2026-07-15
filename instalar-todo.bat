@@ -3,119 +3,145 @@ setlocal enabledelayedexpansion
 title SGF v4.0 - Instalador
 color 0A
 
+:: Este script pausa al final SIEMPRE para que la ventana no se
+:: cierre si hay un error. Tambien se pausa en cada error.
+
 cd /d "%~dp0"
 
 echo ============================================================
 echo   SGF v4.0 - Instalador
 echo ============================================================
 echo.
-echo Este instalador:
 echo   1. Verifica Node.js
-echo   2. Instala dependencias del backend (npm install)
-echo   3. Instala dependencias del frontend (npm install)
-echo   4. Compila el backend (tsc)
-echo   5. Compila el frontend (vite build)
+echo   2. Instala dependencias (npm install)
+echo   3. Compila el backend (tsc)
+echo   4. Compila el frontend (vite build)
 echo.
-echo Requiere internet SOLO la primera vez.
-echo Despues de instalado, el servidor se puede llevar a PCs
-echo sin internet (ver empaquetar-portable.bat).
+echo   Requiere internet SOLO la primera vez.
 echo.
 
-where node >nul 2>&1 || (
-    echo [ERROR] Node.js no instalado.
-    echo Descarguelo de https://nodejs.org (version 18 o superior).
+where node >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] Node.js NO esta instalado o NO esta en el PATH.
+    echo.
+    echo   Solucion:
+    echo     1. Instale Node.js 18 o superior: https://nodejs.org
+    echo     2. Marque la opcion "Add to PATH" durante la instalacion
+    echo     3. Cierre y vuelva a abrir esta ventana
+    echo     4. Vuelva a ejecutar este script
+    echo.
+    echo ============================================================
+    echo   PRESIONE UNA TECLA PARA CERRAR
+    echo ============================================================
     pause
     exit /b 1
 )
 
 for /f "delims=" %%v in ('node --version') do set "NODE_VER=%%v"
-echo [INFO] Node.js detectado: %NODE_VER%
+echo [OK] Node.js detectado: %NODE_VER%
 echo.
 
 :: ============================================================
-:: Backend
+:: 1. Backend - npm install
 :: ============================================================
 echo [1/4] Instalando dependencias del BACKEND...
 cd /d "%~dp0server"
 if not exist "package.json" (
+    echo.
     echo [ERROR] No se encontro server\package.json
+    echo La carpeta del proyecto esta incompleta.
     pause & exit /b 1
 )
 if exist "node_modules" (
     echo   [!] server\node_modules ya existe. Omitiendo npm install.
 ) else (
-    call npm install --no-audit --no-fund --loglevel=error 2>nul
+    echo   Esto puede tardar 1-3 minutos...
+    call npm install --no-audit --no-fund --loglevel=error
     if %errorlevel% neq 0 (
         echo.
         echo [ERROR] Fallo npm install en el backend.
-        echo Revise su conexion a internet o la configuracion de proxy.
-        echo   npm config get proxy
-        echo   npm config set proxy http://su-proxy:puerto
+        echo.
+        echo   Posibles causas:
+        echo     - Sin internet
+        echo     - Proxy no configurado (intente: npm config set proxy http://proxy:puerto)
+        echo     - Firewall corporativo bloqueando npm
+        echo.
+        echo   Si esta en una PC sin internet, copie los node_modules
+        echo   desde una PC con internet (ver empaquetar-portable.bat).
+        echo.
         pause & exit /b 1
     )
-    echo   [OK] server\node_modules listo.
+    echo   [OK] server\node_modules instalado.
 )
 echo.
 
 :: ============================================================
-:: Compilar backend
+:: 2. Backend - tsc
 :: ============================================================
-echo [2/4] Compilando el backend (tsc)...
+echo [2/4] Compilando el BACKEND (tsc)...
 call npx --no-install tsc
 if %errorlevel% neq 0 (
     echo.
     echo [ERROR] La compilacion del backend fallo.
-    echo   cd server
-    echo   npx tsc
+    echo.
+    echo   Para ver el error completo, abra una terminal en esta
+    echo   carpeta y ejecute:
+    echo     cd server
+    echo     npx tsc
+    echo.
     pause & exit /b 1
 )
 if not exist "dist\index.js" (
-    echo [ERROR] La compilacion no produjo dist\index.js
+    echo [ERROR] tsc no produjo dist\index.js
     pause & exit /b 1
 )
-echo   [OK] dist\index.js generado.
+echo   [OK] server\dist\index.js generado.
 echo.
 
 :: ============================================================
-:: Frontend
+:: 3. Frontend - npm install
 :: ============================================================
+echo [3/4] Instalando dependencias del FRONTEND...
 cd /d "%~dp0client"
 if not exist "package.json" (
+    echo.
     echo [ERROR] No se encontro client\package.json
     pause & exit /b 1
 )
-echo [3/4] Instalando dependencias del FRONTEND...
 if exist "node_modules" (
     echo   [!] client\node_modules ya existe. Omitiendo npm install.
 ) else (
-    call npm install --no-audit --no-fund --loglevel=error 2>nul
+    echo   Esto puede tardar 1-3 minutos...
+    call npm install --no-audit --no-fund --loglevel=error
     if %errorlevel% neq 0 (
         echo.
         echo [ERROR] Fallo npm install en el frontend.
-        echo Revise su conexion a internet o la configuracion de proxy.
         pause & exit /b 1
     )
-    echo   [OK] client\node_modules listo.
+    echo   [OK] client\node_modules instalado.
 )
 echo.
 
 :: ============================================================
-:: Compilar frontend
+:: 4. Frontend - vite build
 :: ============================================================
-echo [4/4] Compilando el frontend (vite build)...
-call npx --no-install vite build 2>nul
+echo [4/4] Compilando el FRONTEND (vite build)...
+call npx --no-install vite build
 if %errorlevel% neq 0 (
     echo.
     echo [ERROR] La compilacion del frontend fallo.
-    echo   cd client
-    echo   npx vite build
+    echo.
+    echo   Para ver el error completo:
+    echo     cd client
+    echo     npx vite build
+    echo.
     pause & exit /b 1
 )
 if not exist "dist\index.html" (
     echo [ERROR] vite build no produjo dist\index.html
     pause & exit /b 1
 )
-echo   [OK] dist\index.html generado.
+echo   [OK] client\dist\index.html generado.
 echo.
 
 cd /d "%~dp0"
@@ -124,17 +150,18 @@ echo ============================================================
 echo   INSTALACION COMPLETA
 echo ============================================================
 echo.
-echo   [OK] Backend compilado    = server\dist
-echo   [OK] Frontend compilado   = client\dist
-echo   [OK] Dependencias         = server\node_modules + client\node_modules
+echo   [OK] Backend compilado   = server\dist
+echo   [OK] Frontend compilado  = client\dist
+echo   [OK] Dependencias        = server\node_modules
+echo                              client\node_modules
 echo.
-echo Para iniciar el servidor:
-echo   start-servidor.bat
-echo   (luego abre http://localhost:3000 en el navegador)
+echo   Para iniciar el servidor:
+echo     start-servidor.bat
+echo     (luego abre http://localhost:3000)
 echo.
-echo Para empaquetar el sistema para una PC sin internet:
-echo   empaquetar-portable.bat
-echo.
+echo ============================================================
+echo   PRESIONE UNA TECLA PARA CERRAR
+echo ============================================================
 pause
 endlocal
 exit /b 0

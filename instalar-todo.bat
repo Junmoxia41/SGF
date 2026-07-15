@@ -3,9 +3,6 @@ setlocal enabledelayedexpansion
 title SGF v4.0 - Instalador
 color 0A
 
-:: Este script pausa al final SIEMPRE para que la ventana no se
-:: cierre si hay un error. Tambien se pausa en cada error.
-
 cd /d "%~dp0"
 
 echo ============================================================
@@ -17,7 +14,7 @@ echo   2. Instala dependencias (npm install)
 echo   3. Compila el backend (tsc)
 echo   4. Compila el frontend (vite build)
 echo.
-echo   Requiere internet SOLO la primera vez.
+echo   Si su red tiene proxy, vea GUIA-PROXY.md antes de continuar.
 echo.
 
 where node >nul 2>&1
@@ -41,6 +38,22 @@ for /f "delims=" %%v in ('node --version') do set "NODE_VER=%%v"
 echo [OK] Node.js detectado: %NODE_VER%
 echo.
 
+if defined HTTP_PROXY (
+    echo [OK] HTTP_PROXY configurado en esta consola
+) else if defined HTTPS_PROXY (
+    echo [OK] HTTPS_PROXY configurado en esta consola
+) else (
+    npm config get proxy >nul 2>&1
+    for /f "delims=" %%p in ('npm config get proxy 2^>nul') do set "NPM_PROXY=%%p"
+    if defined NPM_PROXY if not "!NPM_PROXY!"=="null" if not "!NPM_PROXY!"=="" (
+        echo [OK] npm config proxy: !NPM_PROXY!
+    ) else (
+        echo [AVISO] No se detecto proxy configurado.
+        echo         Si su red lo requiere, vea GUIA-PROXY.md.
+    )
+)
+echo.
+
 :: ============================================================
 :: 1. Backend - npm install
 :: ============================================================
@@ -61,13 +74,15 @@ if exist "node_modules" (
         echo.
         echo [ERROR] Fallo npm install en el backend.
         echo.
-        echo   Posibles causas:
-        echo     - Sin internet
-        echo     - Proxy no configurado (intente: npm config set proxy http://proxy:puerto)
-        echo     - Firewall corporativo bloqueando npm
+        echo   Si su red tiene proxy:
+        echo     1. Vea GUIA-PROXY.md para configurarlo
+        echo     2. Cierre esta ventana
+        echo     3. Configure las variables HTTP_PROXY y HTTPS_PROXY
+        echo     4. Vuelva a ejecutar este script
         echo.
-        echo   Si esta en una PC sin internet, copie los node_modules
-        echo   desde una PC con internet (ver empaquetar-portable.bat).
+        echo   Para ver el error exacto, ejecute manualmente:
+        echo     cd server
+        echo     npm install
         echo.
         pause & exit /b 1
     )
@@ -84,8 +99,7 @@ if %errorlevel% neq 0 (
     echo.
     echo [ERROR] La compilacion del backend fallo.
     echo.
-    echo   Para ver el error completo, abra una terminal en esta
-    echo   carpeta y ejecute:
+    echo   Para ver el error completo:
     echo     cd server
     echo     npx tsc
     echo.
@@ -116,6 +130,7 @@ if exist "node_modules" (
     if %errorlevel% neq 0 (
         echo.
         echo [ERROR] Fallo npm install en el frontend.
+        echo Vea GUIA-PROXY.md si su red requiere proxy.
         pause & exit /b 1
     )
     echo   [OK] client\node_modules instalado.

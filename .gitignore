@@ -10,10 +10,11 @@ pnpm-debug.log*
 .stylelintcache
 
 # --- Builds del proyecto ---
-client/dist/
+# server/dist se regenera con 'npx tsc' en cada instalacion (es pequeno
+# y tarda segundos). client/dist se COMITE porque es el artefacto que
+# el modo "anti-ESET" distribuye precompilado para que la maquina
+# final no tenga que ejecutar vite/esbuild (que ESET suele bloquear).
 server/dist/
-sgf-panel.exe
-dist/
 
 # --- Datos de runtime (BD local SQLite, etc.) ---
 server-data/
@@ -66,3 +67,7 @@ env/
 # --- Test artifacts ---
 coverage/
 .nyc_output/
+
+# --- Paquetes generados por build-exe.bat ---
+sgf-panel.exe
+dist/sgf-panel.exe

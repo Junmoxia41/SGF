@@ -16,10 +16,8 @@ if not exist "dist\index.js" (
                 pause & exit /b 1
             )
         )
-        echo [~] Instalando typescript para compilar...
-        call npm install --no-audit --no-fund typescript@^5.9.0
-        if %errorlevel% neq 0 (
-            echo [ERROR] No se pudo instalar typescript.
+        if not exist "node_modules\.bin\tsc.cmd" (
+            echo [ERROR] tsc no encontrado. Reinstale las dependencias.
             pause & exit /b 1
         )
         echo [~] Compilando...

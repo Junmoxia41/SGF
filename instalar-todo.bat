@@ -11,7 +11,7 @@ echo ============================================================
 echo.
 echo MODO ANTI-ESET:
 echo - El cliente YA VIENE COMPILADO en client\dist (no requiere build)
-echo - El backend se compila con tsc al instalar (sin binarios nativos)
+echo - El backend se compila con tsc al instalar (incluido en deps)
 echo - Solo se instalan dependencias necesarias para ejecutar
 echo.
 
@@ -57,12 +57,9 @@ if %errorlevel% neq 0 (
 echo.
 echo [2/3] Verificando compilacion del backend...
 if not exist "dist\index.js" (
-    echo   [!] No existe dist\index.js. Instalando devDependencies para compilar...
-    call npm install --no-audit --no-fund typescript@^5.9.0
-    if %errorlevel% neq 0 (
-        echo.
-        echo [ERROR] No se pudo instalar typescript para compilar.
-        echo Reinstale con internet disponible o use el paquete offline.
+    if not exist "node_modules\.bin\tsc.cmd" (
+        echo [ERROR] tsc no encontrado en node_modules\.bin
+        echo Reinstale las dependencias del servidor.
         cd /d "%~dp0"
         pause
         exit /b 1
@@ -76,14 +73,13 @@ if not exist "dist\index.js" (
         pause
         exit /b 1
     )
-    if exist "dist\index.js" (
-        echo   [OK] Backend compilado.
-    ) else (
+    if not exist "dist\index.js" (
         echo [ERROR] La compilacion no produjo dist\index.js
         cd /d "%~dp0"
         pause
         exit /b 1
     )
+    echo   [OK] Backend compilado.
 ) else (
     echo   [OK] dist\index.js ya existe. No requiere compilacion.
 )
@@ -101,15 +97,11 @@ echo   RESULTADO FINAL
 echo ============================================================
 echo.
 echo   [OK] Servidor listo (dependencias + backend compilado)
-
 echo   [OK] Cliente compilado listo
-
 echo.
 echo Para iniciar:
 echo   1. Ejecuta: start-servidor.bat
-
 echo   2. Abre: http://localhost:3000
-
 echo.
 pause
 endlocal

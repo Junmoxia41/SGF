@@ -2,9 +2,9 @@
 title SGF v4.0 - Abrir Cliente
 cd /d "%~dp0"
 
-echo [INFO] En modo anti-ESET el cliente ya viene compilado.
-echo [INFO] Debe iniciar primero el servidor con: start-servidor.bat
-echo [INFO] Luego abra en el navegador: http://localhost:3000
-echo.
-start "SGF Cliente" http://localhost:3000
-pause
+echo Iniciando servidor...
+start "" /B cmd /c "cd /d %~dp0server && node dist\index.js"
+timeout /t 2 /nobreak >nul
+
+echo Abriendo navegador en http://localhost:3000
+start "" "http://localhost:3000"

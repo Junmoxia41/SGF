@@ -1,70 +1,47 @@
 # Requisitos Python - SGF
 
-## Instalacion rapida
+## ¿Para qué se usa Python?
+
+El archivo `launcher/sgf-launcher.py` ofrece un panel gráfico de control
+(Iniciar / Detener servidor, configurar .env, ver logs). Es **opcional**:
+el sistema funciona perfectamente con los scripts `.bat` simples.
+
+## Si quiere usar el panel gráfico
+
+### 1. Instale Python 3.8+ desde https://www.python.org
+
+En Windows marque la opción **"Add Python to PATH"** durante la instalación.
+
+### 2. Verifique que tkinter está disponible
 
 ```bash
-pip install -r requirements-python.txt
+python -c "import tkinter; print('OK')"
 ```
 
-## Dependencias reales del proyecto
+Si falla:
+- En Windows: reinstale Python y asegúrese de incluir **Tcl/Tk and IDLE**.
+- En Linux: `sudo apt install python3-tk`
 
-### Incluidas en Python (no se instalan por pip)
-El archivo `launcher/sgf-launcher.py` usa solo modulos de la libreria estandar:
-
-- `os`
-- `sys`
-- `subprocess`
-- `threading`
-- `time`
-- `socket`
-- `shutil`
-- `webbrowser`
-- `tkinter`
-- `pathlib`
-- `datetime`
-
-## Dependencias instalables con pip
-
-### Obligatoria solo si quieres compilar el .exe
-- `pyinstaller`
-
-## Notas importantes
-
-### 1. Para ejecutar el launcher `.py`
-Si solo quieres abrir el panel con:
+### 3. Ejecute el panel
 
 ```bash
 python launcher/sgf-launcher.py
 ```
 
-normalmente **no necesitas instalar nada por pip**, siempre que Python tenga `tkinter`.
+O use el acceso directo `SGF-Panel.bat`.
 
-### 2. Si `tkinter` no existe
-En Windows:
-- reinstala Python y asegúrate de incluir **Tcl/Tk and IDLE**
-
-En Linux:
-
-```bash
-sudo apt install python3-tk
-```
-
-### 3. Para generar `sgf-panel.exe`
-Sí necesitas:
+### 4. (Opcional) Compile el .exe
 
 ```bash
 pip install pyinstaller
-```
-
-Luego puedes usar:
-
-```bash
 build-exe.bat
 ```
 
-## Archivo recomendado para pip
-Queda en:
+Eso genera `sgf-panel.exe` que se puede usar sin tener Python instalado.
 
-- `requirements-python.txt`
+## Si NO quiere usar el panel gráfico
 
-Ese es el archivo que debes usar para instalar dependencias Python del proyecto.
+Use directamente:
+- `instalar-todo.bat` - primera vez
+- `start-servidor.bat` - arrancar el servidor
+- `start-cliente.bat` - arrancar y abrir navegador

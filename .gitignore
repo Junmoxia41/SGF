@@ -10,12 +10,10 @@ pnpm-debug.log*
 .stylelintcache
 
 # --- Builds del proyecto ---
-# Tanto server/dist/ como client/dist/ se COMITEAN. El paquete portable
-# se distribuye precompilado para que la maquina final (sin internet,
-# con ESET) no tenga que ejecutar nada: ni tsc, ni vite, ni esbuild.
-# Para regenerarlos desde una PC con internet:
-#   cd server && npx tsc
-#   cd client && npx vite build
+# server/dist/ y client/dist/ se generan al ejecutar instalar-todo.bat.
+# NO se commitean: cada instalacion los regenera desde src/.
+server/dist/
+client/dist/
 
 # --- Datos de runtime (BD local SQLite, etc.) ---
 server-data/

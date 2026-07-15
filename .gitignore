@@ -65,6 +65,11 @@ coverage/
 sgf-panel.exe
 dist/sgf-panel.exe
 
+# --- Zips generados por empaquetar-portable.bat ---
+# Se distribuyen via GitHub Releases (v4.0.0), no en el repo.
+sgf-*-modules.zip
+sgf-proyecto.zip
+
 # server/dist/ y client/dist/ se COMMITEAN precompilados.
 # Para regenerarlos desde una PC de desarrollo:
 #   cd server && npx tsc

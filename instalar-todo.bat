@@ -43,34 +43,98 @@ if defined HTTP_PROXY (
     if defined NPM_PROXY if not "!NPM_PROXY!"=="null" if not "!NPM_PROXY!"=="" (
         echo   [OK] npm config proxy: !NPM_PROXY!
     ) else (
-        echo   [AVISO] No se detecto proxy configurado.
-        echo.
-        echo   Si su red requiere proxy HTTP, vea GUIA-PROXY.md.
-        echo   Ejecute antes de este script:
-        echo     set HTTP_PROXY=http://USUARIO:CLAVE@192.105.34.1:3128
-        echo     set HTTPS_PROXY=http://USUARIO:CLAVE@192.105.34.1:3128
-        echo.
+        echo   [INFO] Sin proxy configurado.
     )
 )
 echo.
 
 :: ============================================================
-:: 1. Backend - npm install
+:: Verificar / descargar node_modules
 :: ============================================================
-echo [1/4] Instalando dependencias del BACKEND...
-cd /d "%~dp0server"
-if not exist "package.json" (
-    echo [ERROR] No se encontro server\package.json
-    pause & exit /b 1
-)
-if exist "node_modules" (
-    echo   [!] server\node_modules ya existe. Omitiendo npm install.
+set "NEED_SERVER_INSTALL=0"
+set "NEED_CLIENT_INSTALL=0"
+
+:: Si server/node_modules no existe Y tenemos un .zip, extraerlo
+if not exist "server\node_modules" (
+    if exist "sgf-server-modules.zip" (
+        echo [1/5] Extrayendo server\node_modules desde sgf-server-modules.zip...
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -Path 'sgf-server-modules.zip' -DestinationPath '.' -Force" >nul
+        if exist "server\node_modules" (
+            echo   [OK] server\node_modules extraido.
+        ) else (
+            echo   [!] Fallo la extraccion. Se intentara npm install.
+            set "NEED_SERVER_INSTALL=1"
+        )
+    ) else (
+        set "NEED_SERVER_INSTALL=1"
+    )
 ) else (
-    echo   Esto puede tardar 1-3 minutos...
+    echo [1/5] server\node_modules ya existe. Omitiendo.
+)
+
+:: Si client/node_modules no existe Y tenemos un .zip, extraerlo
+if not exist "client\node_modules" (
+    if exist "sgf-client-modules.zip" (
+        echo [2/5] Extrayendo client\node_modules desde sgf-client-modules.zip...
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -Path 'sgf-client-modules.zip' -DestinationPath '.' -Force" >nul
+        if exist "client\node_modules" (
+            echo   [OK] client\node_modules extraido.
+        ) else (
+            echo   [!] Fallo la extraccion. Se intentara npm install.
+            set "NEED_CLIENT_INSTALL=1"
+        )
+    ) else (
+        set "NEED_CLIENT_INSTALL=1"
+    )
+) else (
+    echo [2/5] client\node_modules ya existe. Omitiendo.
+)
+
+:: Si los .zip no estaban, intentar descargarlos automaticamente
+:: desde el Release oficial (necesita internet pero evita npm install)
+if %NEED_SERVER_INSTALL% equ 1 (
+    if not exist "server\node_modules" (
+        echo.
+        echo   [!] server\node_modules no existe y no hay .zip local.
+        echo       Intentando descargar desde GitHub Releases...
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -Uri 'https://github.com/Junmoxia41/SGF/releases/download/v4.0.0/sgf-server-modules.zip' -OutFile 'sgf-server-modules.zip' -UseBasicParsing -TimeoutSec 120; Write-Host '   [OK] sgf-server-modules.zip descargado.' } catch { Write-Host '   [!] No se pudo descargar. Se hara npm install.'; exit 1 }" >nul
+        if exist "sgf-server-modules.zip" (
+            powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -Path 'sgf-server-modules.zip' -DestinationPath '.' -Force" >nul
+            if exist "server\node_modules" (
+                set "NEED_SERVER_INSTALL=0"
+            )
+        )
+    )
+)
+if %NEED_CLIENT_INSTALL% equ 1 (
+    if not exist "client\node_modules" (
+        echo   [!] client\node_modules no existe y no hay .zip local.
+        echo       Intentando descargar desde GitHub Releases...
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -Uri 'https://github.com/Junmoxia41/SGF/releases/download/v4.0.0/sgf-client-modules.zip' -OutFile 'sgf-client-modules.zip' -UseBasicParsing -TimeoutSec 120; Write-Host '   [OK] sgf-client-modules.zip descargado.' } catch { Write-Host '   [!] No se pudo descargar. Se hara npm install.'; exit 1 }" >nul
+        if exist "sgf-client-modules.zip" (
+            powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -Path 'sgf-client-modules.zip' -DestinationPath '.' -Force" >nul
+            if exist "client\node_modules" (
+                set "NEED_CLIENT_INSTALL=0"
+            )
+        )
+    )
+)
+
+:: ============================================================
+:: npm install si hace falta
+:: ============================================================
+if %NEED_SERVER_INSTALL% equ 1 (
+    echo.
+    echo [3/5] Instalando dependencias del BACKEND con npm install...
+    cd /d "%~dp0server"
+    if not exist "package.json" (
+        echo [ERROR] No se encontro server\package.json
+        pause & exit /b 1
+    )
     call npm install --no-audit --no-fund --loglevel=error
     if %errorlevel% neq 0 (
         echo.
-        echo [ERROR] Fallo npm install en el backend.
+        echo [ERROR] Fallo npm install del backend.
         echo.
         echo   Si el error es 407 Proxy Authentication Required:
         echo     1. Cierre esta ventana
@@ -78,79 +142,61 @@ if exist "node_modules" (
         echo        contrasena del proxy. Vea GUIA-PROXY.md.
         echo     3. Vuelva a ejecutar este script en la misma consola.
         echo.
-        echo   Para ver el error EXACTO, ejecute:
+        echo   Para ver el error EXACTO:
         echo     cd server
         echo     npm install
-        echo.
-        echo   Use tambien diagnostico-install.bat para mas detalle.
         echo.
         pause & exit /b 1
     )
     echo   [OK] server\node_modules instalado.
-)
-echo.
-
-:: ============================================================
-:: 2. Backend - tsc
-:: ============================================================
-echo [2/4] Compilando el BACKEND (tsc)...
-call npx --no-install tsc
-if %errorlevel% neq 0 (
-    echo.
-    echo [ERROR] La compilacion del backend fallo.
-    echo   cd server ^&^& npx tsc
-    pause & exit /b 1
-)
-if not exist "dist\index.js" (
-    echo [ERROR] tsc no produjo dist\index.js
-    pause & exit /b 1
-)
-echo   [OK] server\dist\index.js generado.
-echo.
-
-:: ============================================================
-:: 3. Frontend - npm install
-:: ============================================================
-echo [3/4] Instalando dependencias del FRONTEND...
-cd /d "%~dp0client"
-if not exist "package.json" (
-    echo [ERROR] No se encontro client\package.json
-    pause & exit /b 1
-)
-if exist "node_modules" (
-    echo   [!] client\node_modules ya existe. Omitiendo npm install.
 ) else (
-    echo   Esto puede tardar 1-3 minutos...
-    call npm install --no-audit --no-fund --loglevel=error
-    if %errorlevel% neq 0 (
-        echo.
-        echo [ERROR] Fallo npm install en el frontend.
-        echo   cd client ^&^& npm install
+    echo [3/5] Backend OK (node_modules listo).
+)
+cd /d "%~dp0"
+echo.
+
+:: ============================================================
+:: Verificar dist/ del backend
+:: ============================================================
+if not exist "server\dist\index.js" (
+    echo [4/5] No existe server\dist\index.js. Intentando compilar...
+    cd /d "%~dp0server"
+    if not exist "node_modules\.bin\tsc.cmd" (
+        if not exist "node_modules\typescript" (
+            echo   [!] typescript no esta. Instalando solo typescript...
+            call npm install --no-audit --no-fund typescript@^5.9.0
+        )
+    )
+    call npx --no-install tsc
+    cd /d "%~dp0"
+    if not exist "server\dist\index.js" (
+        echo [ERROR] No se pudo compilar el backend.
+        echo   Vea GUIA-PROXY.md si es problema de red.
         pause & exit /b 1
     )
-    echo   [OK] client\node_modules instalado.
+    echo   [OK] Backend compilado.
+) else (
+    echo [4/5] server\dist\index.js ya existe.
 )
 echo.
 
 :: ============================================================
-:: 4. Frontend - vite build
+:: Verificar dist/ del frontend
 :: ============================================================
-echo [4/4] Compilando el FRONTEND (vite build)...
-call npx --no-install vite build
-if %errorlevel% neq 0 (
-    echo.
-    echo [ERROR] La compilacion del frontend fallo.
-    echo   cd client ^&^& npx vite build
-    pause & exit /b 1
+if not exist "client\dist\index.html" (
+    echo [5/5] No existe client\dist\index.html. Intentando compilar...
+    cd /d "%~dp0client"
+    call npx --no-install vite build
+    cd /d "%~dp0"
+    if not exist "client\dist\index.html" (
+        echo [ERROR] No se pudo compilar el frontend.
+        pause & exit /b 1
+    )
+    echo   [OK] Frontend compilado.
+) else (
+    echo [5/5] client\dist\index.html ya existe.
 )
-if not exist "dist\index.html" (
-    echo [ERROR] vite build no produjo dist\index.html
-    pause & exit /b 1
-)
-echo   [OK] client\dist\index.html generado.
 echo.
-
-cd /d "%~dp0"
 
 echo ============================================================
 echo   INSTALACION COMPLETA
@@ -158,6 +204,8 @@ echo ============================================================
 echo.
 echo   [OK] Backend compilado   = server\dist
 echo   [OK] Frontend compilado  = client\dist
+echo   [OK] Dependencias        = server\node_modules
+echo                              client\node_modules
 echo.
 echo   Para iniciar el servidor:
 echo     start-servidor.bat

@@ -9,12 +9,6 @@ pnpm-debug.log*
 .eslintcache
 .stylelintcache
 
-# --- Builds del proyecto ---
-# server/dist/ y client/dist/ se generan al ejecutar instalar-todo.bat.
-# NO se commitean: cada instalacion los regenera desde src/.
-server/dist/
-client/dist/
-
 # --- Datos de runtime (BD local SQLite, etc.) ---
 server-data/
 *.db
@@ -70,3 +64,9 @@ coverage/
 # --- Paquetes generados por build-exe.bat ---
 sgf-panel.exe
 dist/sgf-panel.exe
+
+# server/dist/ y client/dist/ se COMMITEAN precompilados.
+# Para regenerarlos desde una PC de desarrollo:
+#   cd server && npx tsc
+#   cd client && npx vite build
+# (El instalador .bat tambien los regenera si decides borrarlos.)

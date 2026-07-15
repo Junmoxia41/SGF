@@ -9,23 +9,11 @@ echo ============================================================
 echo   SGF v4.0 - Instalador
 echo ============================================================
 echo.
-echo   1. Verifica Node.js
-echo   2. Instala dependencias (npm install)
-echo   3. Compila el backend (tsc)
-echo   4. Compila el frontend (vite build)
-echo.
-echo   Si su red tiene proxy, vea GUIA-PROXY.md antes de continuar.
-echo.
 
 where node >nul 2>&1
 if %errorlevel% neq 0 (
     echo [ERROR] Node.js NO esta instalado o NO esta en el PATH.
-    echo.
-    echo   Solucion:
-    echo     1. Instale Node.js 18 o superior: https://nodejs.org
-    echo     2. Marque la opcion "Add to PATH" durante la instalacion
-    echo     3. Cierre y vuelva a abrir esta ventana
-    echo     4. Vuelva a ejecutar este script
+    echo Instale Node.js 18 o superior desde https://nodejs.org
     echo.
     echo ============================================================
     echo   PRESIONE UNA TECLA PARA CERRAR
@@ -38,18 +26,30 @@ for /f "delims=" %%v in ('node --version') do set "NODE_VER=%%v"
 echo [OK] Node.js detectado: %NODE_VER%
 echo.
 
+:: ============================================================
+:: Estado del proxy
+:: ============================================================
+echo === Configuracion de red ===
 if defined HTTP_PROXY (
-    echo [OK] HTTP_PROXY configurado en esta consola
+    echo   [OK] HTTP_PROXY configurado en esta consola
+    call npm config set proxy "%HTTP_PROXY%" >nul 2>&1
+    call npm config set https-proxy "%HTTP_PROXY%" >nul 2>&1
 ) else if defined HTTPS_PROXY (
-    echo [OK] HTTPS_PROXY configurado en esta consola
+    echo   [OK] HTTPS_PROXY configurado en esta consola
+    call npm config set proxy "%HTTPS_PROXY%" >nul 2>&1
+    call npm config set https-proxy "%HTTPS_PROXY%" >nul 2>&1
 ) else (
-    npm config get proxy >nul 2>&1
     for /f "delims=" %%p in ('npm config get proxy 2^>nul') do set "NPM_PROXY=%%p"
     if defined NPM_PROXY if not "!NPM_PROXY!"=="null" if not "!NPM_PROXY!"=="" (
-        echo [OK] npm config proxy: !NPM_PROXY!
+        echo   [OK] npm config proxy: !NPM_PROXY!
     ) else (
-        echo [AVISO] No se detecto proxy configurado.
-        echo         Si su red lo requiere, vea GUIA-PROXY.md.
+        echo   [AVISO] No se detecto proxy configurado.
+        echo.
+        echo   Si su red requiere proxy HTTP, vea GUIA-PROXY.md.
+        echo   Ejecute antes de este script:
+        echo     set HTTP_PROXY=http://USUARIO:CLAVE@192.105.34.1:3128
+        echo     set HTTPS_PROXY=http://USUARIO:CLAVE@192.105.34.1:3128
+        echo.
     )
 )
 echo.
@@ -60,9 +60,7 @@ echo.
 echo [1/4] Instalando dependencias del BACKEND...
 cd /d "%~dp0server"
 if not exist "package.json" (
-    echo.
     echo [ERROR] No se encontro server\package.json
-    echo La carpeta del proyecto esta incompleta.
     pause & exit /b 1
 )
 if exist "node_modules" (
@@ -74,15 +72,17 @@ if exist "node_modules" (
         echo.
         echo [ERROR] Fallo npm install en el backend.
         echo.
-        echo   Si su red tiene proxy:
-        echo     1. Vea GUIA-PROXY.md para configurarlo
-        echo     2. Cierre esta ventana
-        echo     3. Configure las variables HTTP_PROXY y HTTPS_PROXY
-        echo     4. Vuelva a ejecutar este script
+        echo   Si el error es 407 Proxy Authentication Required:
+        echo     1. Cierre esta ventana
+        echo     2. Configure HTTP_PROXY y HTTPS_PROXY con usuario y
+        echo        contrasena del proxy. Vea GUIA-PROXY.md.
+        echo     3. Vuelva a ejecutar este script en la misma consola.
         echo.
-        echo   Para ver el error exacto, ejecute manualmente:
+        echo   Para ver el error EXACTO, ejecute:
         echo     cd server
         echo     npm install
+        echo.
+        echo   Use tambien diagnostico-install.bat para mas detalle.
         echo.
         pause & exit /b 1
     )
@@ -98,11 +98,7 @@ call npx --no-install tsc
 if %errorlevel% neq 0 (
     echo.
     echo [ERROR] La compilacion del backend fallo.
-    echo.
-    echo   Para ver el error completo:
-    echo     cd server
-    echo     npx tsc
-    echo.
+    echo   cd server ^&^& npx tsc
     pause & exit /b 1
 )
 if not exist "dist\index.js" (
@@ -118,7 +114,6 @@ echo.
 echo [3/4] Instalando dependencias del FRONTEND...
 cd /d "%~dp0client"
 if not exist "package.json" (
-    echo.
     echo [ERROR] No se encontro client\package.json
     pause & exit /b 1
 )
@@ -130,7 +125,7 @@ if exist "node_modules" (
     if %errorlevel% neq 0 (
         echo.
         echo [ERROR] Fallo npm install en el frontend.
-        echo Vea GUIA-PROXY.md si su red requiere proxy.
+        echo   cd client ^&^& npm install
         pause & exit /b 1
     )
     echo   [OK] client\node_modules instalado.
@@ -145,11 +140,7 @@ call npx --no-install vite build
 if %errorlevel% neq 0 (
     echo.
     echo [ERROR] La compilacion del frontend fallo.
-    echo.
-    echo   Para ver el error completo:
-    echo     cd client
-    echo     npx vite build
-    echo.
+    echo   cd client ^&^& npx vite build
     pause & exit /b 1
 )
 if not exist "dist\index.html" (
@@ -167,8 +158,6 @@ echo ============================================================
 echo.
 echo   [OK] Backend compilado   = server\dist
 echo   [OK] Frontend compilado  = client\dist
-echo   [OK] Dependencias        = server\node_modules
-echo                              client\node_modules
 echo.
 echo   Para iniciar el servidor:
 echo     start-servidor.bat

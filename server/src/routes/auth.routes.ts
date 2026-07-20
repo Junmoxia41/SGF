@@ -46,8 +46,11 @@ function normalizeUserPublic(internal: ReturnType<typeof normalizeUserInternal>)
   };
 }
 
-const LOGIN_LIMIT_PER_MIN = Number(process.env.LOGIN_RATE_PER_MIN || 5);
-const LOGIN_LIMIT_PER_15MIN = Number(process.env.LOGIN_RATE_PER_15MIN || 30);
+// Rate limit de login. Por defecto es permisivo (30/min y 200/15min)
+// para no molestar en pruebas. Si tu red tiene riesgo de fuerza bruta,
+// configura LOGIN_RATE_PER_MIN=5 y LOGIN_RATE_PER_15MIN=30 en el .env.
+const LOGIN_LIMIT_PER_MIN = Number(process.env.LOGIN_RATE_PER_MIN || 30);
+const LOGIN_LIMIT_PER_15MIN = Number(process.env.LOGIN_RATE_PER_15MIN || 200);
 
 export async function handleLogin(req: AuthenticatedRequest, res: ServerResponse) {
   let body: any;

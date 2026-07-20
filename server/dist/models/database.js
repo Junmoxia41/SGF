@@ -295,32 +295,39 @@ export function nullableCoalesce(...args) {
     return `IFNULL(${args.join(", ")})`;
 }
 async function ensureAdmin() {
-    const hash = await bcrypt.hash("123", 12);
+    // El admin por defecto se crea automaticamente al primer arranque si
+    // la tabla SGF_USUARIOS esta vacia. La contrasena se toma del .env
+    // (DEFAULT_ADMIN_PASSWORD) y por defecto es "5421915432". El usuario
+    // es "yolexis" (DEFAULT_ADMIN_USER).
+    const adminUser = String(process.env.DEFAULT_ADMIN_USER || "yolexis");
+    const adminPass = String(process.env.DEFAULT_ADMIN_PASSWORD || "5421915432");
+    const adminName = String(process.env.DEFAULT_ADMIN_NAME || "Administrador SGF");
+    const hash = await bcrypt.hash(adminPass, 12);
     const id = randomUUID();
     if (mode === "oracle") {
-        const rows = await query("SELECT ID FROM SGF_USUARIOS WHERE USERNAME = :u", { u: "yolexis" });
+        const rows = await query("SELECT ID FROM SGF_USUARIOS WHERE USERNAME = :u", { u: adminUser });
         if (rows.length > 0)
             return;
         await execute(`INSERT INTO SGF_USUARIOS (ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT, UPDATED_AT)
-       VALUES (:id, :u, :n, :r, :h, 1, SYSTIMESTAMP, SYSTIMESTAMP)`, { id, u: "yolexis", n: "Administrador SGF", r: "admin", h: hash });
-        console.log("[SGF] Admin Oracle creado: yolexis / 123");
+       VALUES (:id, :u, :n, :r, :h, 1, SYSTIMESTAMP, SYSTIMESTAMP)`, { id, u: adminUser, n: adminName, r: "admin", h: hash });
+        console.log(`[SGF] Admin Oracle creado: ${adminUser} (contrasena definida en DEFAULT_ADMIN_PASSWORD del .env)`);
         return;
     }
     if (mode === "mssql") {
-        const rows = await query("SELECT ID FROM SGF_USUARIOS WHERE USERNAME = :u", { u: "yolexis" });
+        const rows = await query("SELECT ID FROM SGF_USUARIOS WHERE USERNAME = :u", { u: adminUser });
         if (rows.length > 0)
             return;
         await execute(`INSERT INTO SGF_USUARIOS (ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT, UPDATED_AT)
-       VALUES (:id, :u, :n, :r, :h, 1, SYSUTCDATETIME(), SYSUTCDATETIME())`, { id, u: "yolexis", n: "Administrador SGF", r: "admin", h: hash });
-        console.log("[SGF] Admin SQL Server creado: yolexis / 123");
+       VALUES (:id, :u, :n, :r, :h, 1, SYSUTCDATETIME(), SYSUTCDATETIME())`, { id, u: adminUser, n: adminName, r: "admin", h: hash });
+        console.log(`[SGF] Admin SQL Server creado: ${adminUser} (contrasena definida en DEFAULT_ADMIN_PASSWORD del .env)`);
         return;
     }
-    const rows = await sqliteQuery("SELECT ID FROM SGF_USUARIOS WHERE USERNAME = :u", { u: "yolexis" });
+    const rows = await sqliteQuery("SELECT ID FROM SGF_USUARIOS WHERE USERNAME = :u", { u: adminUser });
     if (rows.length > 0)
         return;
     await sqliteExecute(`INSERT INTO SGF_USUARIOS (ID, USERNAME, NOMBRE, ROL, PASSWORD_HASH, ACTIVO, CREADO)
-     VALUES (:id, :u, :n, :r, :h, 1, datetime('now'))`, { id, u: "yolexis", n: "Administrador SGF", r: "admin", h: hash });
-    console.log("[SGF] Admin SQLite creado: yolexis / 123");
+     VALUES (:id, :u, :n, :r, :h, 1, datetime('now'))`, { id, u: adminUser, n: adminName, r: "admin", h: hash });
+    console.log(`[SGF] Admin SQLite creado: ${adminUser} (contrasena definida en DEFAULT_ADMIN_PASSWORD del .env)`);
 }
 async function initSqlite() {
     const SQL = await initSqlJs();

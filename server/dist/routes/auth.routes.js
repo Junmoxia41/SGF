@@ -79,9 +79,9 @@ export async function handleLogin(req, res) {
     }
     try {
         const dbMode = getDbMode();
-        const sql = dbMode === "oracle"
-            ? `SELECT ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT FROM SGF_USUARIOS WHERE USERNAME = :u`
-            : `SELECT ID, USERNAME, NOMBRE, ROL, PASSWORD_HASH, ACTIVO, CREADO FROM SGF_USUARIOS WHERE USERNAME = :u`;
+        const sql = dbMode === "sqlite"
+            ? `SELECT ID, USERNAME, NOMBRE, ROL, PASSWORD_HASH, ACTIVO, CREADO FROM SGF_USUARIOS WHERE USERNAME = :u`
+            : `SELECT ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT FROM SGF_USUARIOS WHERE USERNAME = :u`;
         const rows = await query(sql, { u: username });
         if (rows.length === 0) {
             return sendJson(res, 401, { success: false, error: "Usuario o contrasena incorrectos." });
@@ -153,9 +153,9 @@ export async function handleLogout(req, res) {
 }
 export async function handleMe(req, res) {
     try {
-        const sql = getDbMode() === "oracle"
-            ? `SELECT ID, USERNAME, NAME, ROLE, ACTIVE, CREATED_AT FROM SGF_USUARIOS WHERE ID = :id`
-            : `SELECT ID, USERNAME, NOMBRE, ROL, ACTIVO, CREADO FROM SGF_USUARIOS WHERE ID = :id`;
+        const sql = getDbMode() === "sqlite"
+            ? `SELECT ID, USERNAME, NOMBRE, ROL, ACTIVO, CREADO FROM SGF_USUARIOS WHERE ID = :id`
+            : `SELECT ID, USERNAME, NAME, ROLE, ACTIVE, CREATED_AT FROM SGF_USUARIOS WHERE ID = :id`;
         const rows = await query(sql, { id: req.currentUser.id });
         if (rows.length === 0) {
             return sendJson(res, 404, { success: false, error: "Usuario no encontrado." });

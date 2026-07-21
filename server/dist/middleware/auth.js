@@ -17,8 +17,11 @@ export async function authenticate(req, res) {
         const rows = dbMode === "oracle"
             ? await query(`SELECT ID FROM SGF_SESIONES
            WHERE SESSION_TOKEN = :t AND ACTIVE = 1 AND EXPIRES_AT > SYSTIMESTAMP`, { t: token })
-            : await query(`SELECT ID FROM SGF_SESIONES
-           WHERE TOKEN = :t AND ACTIVO = 1 AND EXPIRA > datetime('now')`, { t: token });
+            : dbMode === "mssql"
+                ? await query(`SELECT ID FROM SGF_SESIONES
+             WHERE SESSION_TOKEN = :t AND ACTIVE = 1 AND EXPIRES_AT > SYSUTCDATETIME()`, { t: token })
+                : await query(`SELECT ID FROM SGF_SESIONES
+             WHERE TOKEN = :t AND ACTIVO = 1 AND EXPIRA > datetime('now')`, { t: token });
         if (rows.length === 0) {
             sendJson(res, 401, { success: false, error: "Sesion expirada o cerrada." });
             return null;

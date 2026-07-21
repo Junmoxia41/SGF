@@ -96,9 +96,9 @@ export async function handleLogin(req: AuthenticatedRequest, res: ServerResponse
 
   try {
     const dbMode = getDbMode();
-    const sql = dbMode === "oracle"
-      ? `SELECT ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT FROM SGF_USUARIOS WHERE USERNAME = :u`
-      : `SELECT ID, USERNAME, NOMBRE, ROL, PASSWORD_HASH, ACTIVO, CREADO FROM SGF_USUARIOS WHERE USERNAME = :u`;
+    const sql = dbMode === "sqlite"
+      ? `SELECT ID, USERNAME, NOMBRE, ROL, PASSWORD_HASH, ACTIVO, CREADO FROM SGF_USUARIOS WHERE USERNAME = :u`
+      : `SELECT ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT FROM SGF_USUARIOS WHERE USERNAME = :u`;
 
     const rows = await query<any>(sql, { u: username });
     if (rows.length === 0) {
@@ -186,9 +186,9 @@ export async function handleLogout(req: AuthenticatedRequest, res: ServerRespons
 
 export async function handleMe(req: AuthenticatedRequest, res: ServerResponse) {
   try {
-    const sql = getDbMode() === "oracle"
-      ? `SELECT ID, USERNAME, NAME, ROLE, ACTIVE, CREATED_AT FROM SGF_USUARIOS WHERE ID = :id`
-      : `SELECT ID, USERNAME, NOMBRE, ROL, ACTIVO, CREADO FROM SGF_USUARIOS WHERE ID = :id`;
+    const sql = getDbMode() === "sqlite"
+      ? `SELECT ID, USERNAME, NOMBRE, ROL, ACTIVO, CREADO FROM SGF_USUARIOS WHERE ID = :id`
+      : `SELECT ID, USERNAME, NAME, ROLE, ACTIVE, CREATED_AT FROM SGF_USUARIOS WHERE ID = :id`;
 
     const rows = await query<any>(sql, { id: req.currentUser!.id });
     if (rows.length === 0) {

@@ -21,9 +21,9 @@ export async function handleGetUsers(req: AuthenticatedRequest, res: ServerRespo
   if (!requireAdmin(req, res)) return;
 
   try {
-    const sql = getDbMode() === "oracle"
-      ? `SELECT ID, USERNAME, NAME, ROLE, ACTIVE, CREATED_AT FROM SGF_USUARIOS ORDER BY CREATED_AT DESC`
-      : `SELECT ID, USERNAME, NOMBRE, ROL, ACTIVO, CREADO FROM SGF_USUARIOS ORDER BY CREADO DESC`;
+    const sql = getDbMode() === "sqlite"
+      ? `SELECT ID, USERNAME, NOMBRE, ROL, ACTIVO, CREADO FROM SGF_USUARIOS ORDER BY CREADO DESC`
+      : `SELECT ID, USERNAME, NAME, ROLE, ACTIVE, CREATED_AT FROM SGF_USUARIOS ORDER BY CREATED_AT DESC`;
 
     const users = await query<any>(sql);
     return sendJson(res, 200, { success: true, data: users.map(normalizeUser), meta: { total: users.length } });
@@ -107,15 +107,15 @@ export async function handleUpdateUser(req: AuthenticatedRequest, res: ServerRes
     const params: Record<string, any> = { id: userId };
 
     if (body.name !== undefined) {
-      sets.push(`${dbMode === "oracle" ? "NAME" : "NOMBRE"} = :n`);
+      sets.push(`${dbMode === "sqlite" ? "NOMBRE" : "NAME"} = :n`);
       params.n = String(body.name).trim();
     }
     if (body.role === "admin" || body.role === "usuario") {
-      sets.push(`${dbMode === "oracle" ? "ROLE" : "ROL"} = :r`);
+      sets.push(`${dbMode === "sqlite" ? "ROL" : "ROLE"} = :r`);
       params.r = body.role;
     }
     if (body.active !== undefined) {
-      sets.push(`${dbMode === "oracle" ? "ACTIVE" : "ACTIVO"} = :a`);
+      sets.push(`${dbMode === "sqlite" ? "ACTIVO" : "ACTIVE"} = :a`);
       params.a = body.active ? 1 : 0;
     }
     if (body.password) {

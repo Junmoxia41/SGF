@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { connectMssqlRuntime, connectOracleRuntime, getDbMode, } from "../models/database.js";
-import { sendJson, readJsonBody, requireAdmin } from "../middleware/auth.js";
+import { closeDb, connectMssqlRuntime, connectOracleRuntime, getDbMode, initDatabase, } from "../models/database.js";
+import { sendJson, readJsonBody } from "../middleware/auth.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENV_PATH = path.resolve(__dirname, "../../.env");
 function currentConfig() {
@@ -245,8 +245,10 @@ export async function handleDbTest(req, res) {
     return sendJson(res, 200, await testOracle(config));
 }
 export async function handleDbConnect(req, res) {
-    if (!requireAdmin(req, res))
-        return;
+    // Permitir desde login sin sesion: si hay usuario logueado, debe ser admin, si no hay sesion, permitir (flujo de login)
+    if (req.currentUser && req.currentUser.role !== 'admin') {
+        return sendJson(res, 403, { success: false, error: "Se requiere rol de administrador." });
+    }
     let body;
     try {
         body = await readJsonBody(req);
@@ -321,6 +323,34 @@ export async function handleDbConnect(req, res) {
             success: false,
             error: `No se pudo conectar (${type}): ${error.message}`,
         });
+    }
+}
+export async function handleDbDisconnect(req, res) {
+    // Permitir desconectar desde login o desde panel admin
+    if (req.currentUser && req.currentUser.role !== 'admin') {
+        return sendJson(res, 403, { success: false, error: "Se requiere rol de administrador." });
+    }
+    try {
+        // Guardar DB_TYPE = sqlite
+        saveEnvConfig({
+            DB_TYPE: "sqlite",
+        });
+        process.env.DB_TYPE = "sqlite";
+        // Cerrar pools actuales
+        try {
+            await closeDb();
+        }
+        catch { }
+        // Reiniciar en modo sqlite
+        const result = await initDatabase();
+        return sendJson(res, 200, {
+            success: true,
+            message: "Desconectado de BD enterprise, ahora en SQLite local.",
+            data: { mode: result.mode, config: currentConfig() },
+        });
+    }
+    catch (error) {
+        return sendJson(res, 500, { success: false, error: `No se pudo desconectar: ${error.message}` });
     }
 }
 //# sourceMappingURL=dbconfig.routes.js.map

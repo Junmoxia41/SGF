@@ -3,11 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ServerResponse } from "node:http";
 import {
+  closeDb,
   connectMssqlRuntime,
   connectOracleRuntime,
   getDbMode,
+  initDatabase,
 } from "../models/database.js";
-import { sendJson, readJsonBody, requireAdmin } from "../middleware/auth.js";
+import { sendJson, readJsonBody } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -276,7 +278,10 @@ export async function handleDbTest(req: AuthenticatedRequest, res: ServerRespons
 }
 
 export async function handleDbConnect(req: AuthenticatedRequest, res: ServerResponse) {
-  if (!requireAdmin(req, res)) return;
+  // Permitir desde login sin sesion: si hay usuario logueado, debe ser admin, si no hay sesion, permitir (flujo de login)
+  if (req.currentUser && req.currentUser.role !== 'admin') {
+    return sendJson(res, 403, { success: false, error: "Se requiere rol de administrador." });
+  }
 
   let body: any;
   try {
@@ -355,3 +360,29 @@ export async function handleDbConnect(req: AuthenticatedRequest, res: ServerResp
     });
   }
 }
+
+export async function handleDbDisconnect(req: AuthenticatedRequest, res: ServerResponse) {
+  // Permitir desconectar desde login o desde panel admin
+  if (req.currentUser && req.currentUser.role !== 'admin') {
+    return sendJson(res, 403, { success: false, error: "Se requiere rol de administrador." });
+  }
+  try {
+    // Guardar DB_TYPE = sqlite
+    saveEnvConfig({
+      DB_TYPE: "sqlite",
+    });
+    process.env.DB_TYPE = "sqlite";
+    // Cerrar pools actuales
+    try { await closeDb(); } catch {}
+    // Reiniciar en modo sqlite
+    const result = await initDatabase();
+    return sendJson(res, 200, {
+      success: true,
+      message: "Desconectado de BD enterprise, ahora en SQLite local.",
+      data: { mode: result.mode, config: currentConfig() },
+    });
+  } catch (error: any) {
+    return sendJson(res, 500, { success: false, error: `No se pudo desconectar: ${error.message}` });
+  }
+}
+

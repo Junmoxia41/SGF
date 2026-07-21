@@ -68,7 +68,28 @@ export default function App() {
     );
   }
 
-  if (!auth.user) return <LoginScreen serverInfo={server.info} loginError={auth.error} onLogin={handleLogin} />;
+  if (!auth.user)
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Toast toast={toast} />
+        <LoginScreen
+          serverInfo={server.info}
+          loginError={auth.error}
+          onLogin={handleLogin}
+          onOpenDbConfig={() => setShowDbConfig(true)}
+          onDbChange={() => server.recheck()}
+        />
+        {showDbConfig && (
+          <DbConfigPanel
+            onClose={() => {
+              setShowDbConfig(false);
+              server.recheck();
+            }}
+            showToast={showToast}
+          />
+        )}
+      </div>
+    );
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950">

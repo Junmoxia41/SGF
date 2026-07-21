@@ -7,7 +7,7 @@ import { APP_CONFIG, SERVER_CONFIG } from "./config/index.js";
 import { closeDb, getDbMode, initDatabase, pingDb } from "./models/database.js";
 import { authenticate, sendJson } from "./middleware/auth.js";
 import { handleLogin, handleLogout, handleMe } from "./routes/auth.routes.js";
-import { handleDbConfig, handleDbConnect, handleDbTest } from "./routes/dbconfig.routes.js";
+import { handleDbConfig, handleDbConnect, handleDbDisconnect, handleDbTest } from "./routes/dbconfig.routes.js";
 import { handleCreateFactura, handleDeleteFactura, handleFacturaStats, handleGetFactura, handleGetFacturas, handleUpdateFactura, } from "./routes/facturas.routes.js";
 import { handleClearLogs, handleGetLogs } from "./routes/logs.routes.js";
 import { handleSearchServicios } from "./routes/services.routes.js";
@@ -103,6 +103,12 @@ const server = http.createServer({ requestTimeout: SERVER_CONFIG.requestTimeoutM
             return handleLogin(req, res);
         if (requestPath === "/api/db/test" && req.method === "POST")
             return handleDbTest(req, res);
+        if (requestPath === "/api/db/config" && req.method === "GET")
+            return handleDbConfig(req, res);
+        if (requestPath === "/api/db/connect" && req.method === "POST")
+            return handleDbConnect(req, res);
+        if (requestPath === "/api/db/disconnect" && req.method === "POST")
+            return handleDbDisconnect(req, res);
         const user = await authenticate(req, res);
         if (!user)
             return;
@@ -110,10 +116,6 @@ const server = http.createServer({ requestTimeout: SERVER_CONFIG.requestTimeoutM
             return handleMe(req, res);
         if (requestPath === "/api/auth/logout" && req.method === "POST")
             return handleLogout(req, res);
-        if (requestPath === "/api/db/config" && req.method === "GET")
-            return handleDbConfig(req, res);
-        if (requestPath === "/api/db/connect" && req.method === "POST")
-            return handleDbConnect(req, res);
         if (requestPath === "/api/users" && req.method === "GET")
             return handleGetUsers(req, res);
         if (requestPath === "/api/users" && req.method === "POST")

@@ -299,6 +299,9 @@ async function ensureAdmin() {
     // la tabla SGF_USUARIOS esta vacia. La contrasena se toma del .env
     // (DEFAULT_ADMIN_PASSWORD) y por defecto es "5421915432". El usuario
     // es "yolexis" (DEFAULT_ADMIN_USER).
+    // MEJORA: Si el usuario ya existe, se actualiza su password al valor
+    // del .env para evitar el problema de "usuario no encontrado / pass invalida"
+    // cuando la BD ya tenia un hash viejo (ej: 123).
     const adminUser = String(process.env.DEFAULT_ADMIN_USER || "yolexis");
     const adminPass = String(process.env.DEFAULT_ADMIN_PASSWORD || "5421915432");
     const adminName = String(process.env.DEFAULT_ADMIN_NAME || "Administrador SGF");
@@ -306,28 +309,41 @@ async function ensureAdmin() {
     const id = randomUUID();
     if (mode === "oracle") {
         const rows = await query("SELECT ID FROM SGF_USUARIOS WHERE USERNAME = :u", { u: adminUser });
-        if (rows.length > 0)
-            return;
-        await execute(`INSERT INTO SGF_USUARIOS (ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT, UPDATED_AT)
-       VALUES (:id, :u, :n, :r, :h, 1, SYSTIMESTAMP, SYSTIMESTAMP)`, { id, u: adminUser, n: adminName, r: "admin", h: hash });
-        console.log(`[SGF] Admin Oracle creado: ${adminUser} (contrasena definida en DEFAULT_ADMIN_PASSWORD del .env)`);
+        if (rows.length === 0) {
+            await execute(`INSERT INTO SGF_USUARIOS (ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT, UPDATED_AT)
+         VALUES (:id, :u, :n, :r, :h, 1, SYSTIMESTAMP, SYSTIMESTAMP)`, { id, u: adminUser, n: adminName, r: "admin", h: hash });
+            console.log(`[SGF] Admin Oracle creado: ${adminUser} (contrasena definida en DEFAULT_ADMIN_PASSWORD del .env)`);
+        }
+        else {
+            // Actualizar password para que siempre coincida con .env
+            await execute(`UPDATE SGF_USUARIOS SET PASSWORD_HASH = :h, ACTIVE = 1, NAME = :n, ROLE = 'admin', UPDATED_AT = SYSTIMESTAMP WHERE USERNAME = :u`, { h: hash, n: adminName, u: adminUser });
+            console.log(`[SGF] Admin Oracle actualizado: ${adminUser}`);
+        }
         return;
     }
     if (mode === "mssql") {
         const rows = await query("SELECT ID FROM SGF_USUARIOS WHERE USERNAME = :u", { u: adminUser });
-        if (rows.length > 0)
-            return;
-        await execute(`INSERT INTO SGF_USUARIOS (ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT, UPDATED_AT)
-       VALUES (:id, :u, :n, :r, :h, 1, SYSUTCDATETIME(), SYSUTCDATETIME())`, { id, u: adminUser, n: adminName, r: "admin", h: hash });
-        console.log(`[SGF] Admin SQL Server creado: ${adminUser} (contrasena definida en DEFAULT_ADMIN_PASSWORD del .env)`);
+        if (rows.length === 0) {
+            await execute(`INSERT INTO SGF_USUARIOS (ID, USERNAME, NAME, ROLE, PASSWORD_HASH, ACTIVE, CREATED_AT, UPDATED_AT)
+         VALUES (:id, :u, :n, :r, :h, 1, SYSUTCDATETIME(), SYSUTCDATETIME())`, { id, u: adminUser, n: adminName, r: "admin", h: hash });
+            console.log(`[SGF] Admin SQL Server creado: ${adminUser} (contrasena definida en DEFAULT_ADMIN_PASSWORD del .env)`);
+        }
+        else {
+            await execute(`UPDATE SGF_USUARIOS SET PASSWORD_HASH = :h, ACTIVE = 1, NAME = :n, ROLE = 'admin', UPDATED_AT = SYSUTCDATETIME() WHERE USERNAME = :u`, { h: hash, n: adminName, u: adminUser });
+            console.log(`[SGF] Admin SQL Server actualizado: ${adminUser} (password reseteado a DEFAULT_ADMIN_PASSWORD)`);
+        }
         return;
     }
     const rows = await sqliteQuery("SELECT ID FROM SGF_USUARIOS WHERE USERNAME = :u", { u: adminUser });
-    if (rows.length > 0)
-        return;
-    await sqliteExecute(`INSERT INTO SGF_USUARIOS (ID, USERNAME, NOMBRE, ROL, PASSWORD_HASH, ACTIVO, CREADO)
-     VALUES (:id, :u, :n, :r, :h, 1, datetime('now'))`, { id, u: adminUser, n: adminName, r: "admin", h: hash });
-    console.log(`[SGF] Admin SQLite creado: ${adminUser} (contrasena definida en DEFAULT_ADMIN_PASSWORD del .env)`);
+    if (rows.length === 0) {
+        await sqliteExecute(`INSERT INTO SGF_USUARIOS (ID, USERNAME, NOMBRE, ROL, PASSWORD_HASH, ACTIVO, CREADO)
+       VALUES (:id, :u, :n, :r, :h, 1, datetime('now'))`, { id, u: adminUser, n: adminName, r: "admin", h: hash });
+        console.log(`[SGF] Admin SQLite creado: ${adminUser} (contrasena definida en DEFAULT_ADMIN_PASSWORD del .env)`);
+    }
+    else {
+        await sqliteExecute(`UPDATE SGF_USUARIOS SET PASSWORD_HASH = :h, ACTIVO = 1, NOMBRE = :n, ROL = 'admin' WHERE USERNAME = :u`, { h: hash, n: adminName, u: adminUser });
+        console.log(`[SGF] Admin SQLite actualizado: ${adminUser}`);
+    }
 }
 async function initSqlite() {
     const SQL = await initSqlJs();

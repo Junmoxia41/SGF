@@ -114,8 +114,8 @@ function saveEnvConfig(values: Record<string, string | undefined>) {
   if (!map.get("JWT_EXPIRES_IN")) map.set("JWT_EXPIRES_IN", "8h");
   if (!map.get("REQUEST_TIMEOUT_MS")) map.set("REQUEST_TIMEOUT_MS", "30000");
   if (!map.get("MAX_FILE_SIZE_MB")) map.set("MAX_FILE_SIZE_MB", "10");
-  if (!map.get("LOGIN_RATE_PER_MIN")) map.set("LOGIN_RATE_PER_MIN", "5");
-  if (!map.get("LOGIN_RATE_PER_15MIN")) map.set("LOGIN_RATE_PER_15MIN", "30");
+  if (!map.get("LOGIN_RATE_PER_MIN")) map.set("LOGIN_RATE_PER_MIN", "30");
+  if (!map.get("LOGIN_RATE_PER_15MIN")) map.set("LOGIN_RATE_PER_15MIN", "200");
   if (!map.get("ORACLE_POOL_MIN")) map.set("ORACLE_POOL_MIN", "2");
   if (!map.get("ORACLE_POOL_MAX")) map.set("ORACLE_POOL_MAX", "20");
   if (!map.get("ORACLE_POOL_INCREMENT")) map.set("ORACLE_POOL_INCREMENT", "2");

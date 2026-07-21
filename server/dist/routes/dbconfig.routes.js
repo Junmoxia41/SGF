@@ -90,9 +90,9 @@ function saveEnvConfig(values) {
     if (!map.get("MAX_FILE_SIZE_MB"))
         map.set("MAX_FILE_SIZE_MB", "10");
     if (!map.get("LOGIN_RATE_PER_MIN"))
-        map.set("LOGIN_RATE_PER_MIN", "5");
+        map.set("LOGIN_RATE_PER_MIN", "30");
     if (!map.get("LOGIN_RATE_PER_15MIN"))
-        map.set("LOGIN_RATE_PER_15MIN", "30");
+        map.set("LOGIN_RATE_PER_15MIN", "200");
     if (!map.get("ORACLE_POOL_MIN"))
         map.set("ORACLE_POOL_MIN", "2");
     if (!map.get("ORACLE_POOL_MAX"))

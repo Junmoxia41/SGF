@@ -28,12 +28,12 @@ if not exist "node_modules" (
     echo [!] Falta server\node_modules. Intentando recuperar...
     if exist "..\sgf-server-modules.zip" (
         echo   Extrayendo sgf-server-modules.zip...
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -Path '..\sgf-server-modules.zip' -DestinationPath '..' -Force" >nul
+        powershell -NoProfile -ExecutionPolicy Bypass -File "..\extraer-node-modules.ps1" -ZipPath "..\sgf-server-modules.zip" -Destino ".." 2>nul
     ) else (
         echo   Descargando sgf-server-modules.zip desde GitHub Releases...
         powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -Uri 'https://github.com/Junmoxia41/SGF/releases/download/v4.0.0/sgf-server-modules.zip' -OutFile '..\sgf-server-modules.zip' -UseBasicParsing -TimeoutSec 120 } catch { Write-Host 'No se pudo descargar. Ejecute instalar-todo.bat.'; exit 1 }" >nul
         if exist "..\sgf-server-modules.zip" (
-            powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -Path '..\sgf-server-modules.zip' -DestinationPath '..' -Force" >nul
+            powershell -NoProfile -ExecutionPolicy Bypass -File "..\extraer-node-modules.ps1" -ZipPath "..\sgf-server-modules.zip" -Destino ".." 2>nul
         )
     )
     if not exist "node_modules" (

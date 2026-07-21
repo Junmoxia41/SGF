@@ -54,11 +54,10 @@ echo.
 set "NEED_SERVER_INSTALL=0"
 set "NEED_CLIENT_INSTALL=0"
 
-:: Si server/node_modules no existe Y tenemos un .zip, extraerlo
 if not exist "server\node_modules" (
     if exist "sgf-server-modules.zip" (
         echo [1/5] Extrayendo server\node_modules desde sgf-server-modules.zip...
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -Path 'sgf-server-modules.zip' -DestinationPath '.' -Force" >nul
+        call :extraer_zip "sgf-server-modules.zip"
         if exist "server\node_modules" (
             echo   [OK] server\node_modules extraido.
         ) else (
@@ -72,11 +71,10 @@ if not exist "server\node_modules" (
     echo [1/5] server\node_modules ya existe. Omitiendo.
 )
 
-:: Si client/node_modules no existe Y tenemos un .zip, extraerlo
 if not exist "client\node_modules" (
     if exist "sgf-client-modules.zip" (
         echo [2/5] Extrayendo client\node_modules desde sgf-client-modules.zip...
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -Path 'sgf-client-modules.zip' -DestinationPath '.' -Force" >nul
+        call :extraer_zip "sgf-client-modules.zip"
         if exist "client\node_modules" (
             echo   [OK] client\node_modules extraido.
         ) else (
@@ -90,8 +88,6 @@ if not exist "client\node_modules" (
     echo [2/5] client\node_modules ya existe. Omitiendo.
 )
 
-:: Si los .zip no estaban, intentar descargarlos automaticamente
-:: desde el Release oficial (necesita internet pero evita npm install)
 if %NEED_SERVER_INSTALL% equ 1 (
     if not exist "server\node_modules" (
         echo.
@@ -99,10 +95,8 @@ if %NEED_SERVER_INSTALL% equ 1 (
         echo       Intentando descargar desde GitHub Releases...
         powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -Uri 'https://github.com/Junmoxia41/SGF/releases/download/v4.0.0/sgf-server-modules.zip' -OutFile 'sgf-server-modules.zip' -UseBasicParsing -TimeoutSec 120; Write-Host '   [OK] sgf-server-modules.zip descargado.' } catch { Write-Host '   [!] No se pudo descargar. Se hara npm install.'; exit 1 }" >nul
         if exist "sgf-server-modules.zip" (
-            powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -Path 'sgf-server-modules.zip' -DestinationPath '.' -Force" >nul
-            if exist "server\node_modules" (
-                set "NEED_SERVER_INSTALL=0"
-            )
+            call :extraer_zip "sgf-server-modules.zip"
+            if exist "server\node_modules" set "NEED_SERVER_INSTALL=0"
         )
     )
 )
@@ -112,10 +106,8 @@ if %NEED_CLIENT_INSTALL% equ 1 (
         echo       Intentando descargar desde GitHub Releases...
         powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -Uri 'https://github.com/Junmoxia41/SGF/releases/download/v4.0.0/sgf-client-modules.zip' -OutFile 'sgf-client-modules.zip' -UseBasicParsing -TimeoutSec 120; Write-Host '   [OK] sgf-client-modules.zip descargado.' } catch { Write-Host '   [!] No se pudo descargar. Se hara npm install.'; exit 1 }" >nul
         if exist "sgf-client-modules.zip" (
-            powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -Path 'sgf-client-modules.zip' -DestinationPath '.' -Force" >nul
-            if exist "client\node_modules" (
-                set "NEED_CLIENT_INSTALL=0"
-            )
+            call :extraer_zip "sgf-client-modules.zip"
+            if exist "client\node_modules" set "NEED_CLIENT_INSTALL=0"
         )
     )
 )
@@ -217,3 +209,11 @@ echo ============================================================
 pause
 endlocal
 exit /b 0
+
+:: ============================================================
+:: Funcion: extrae un .zip de forma robusta (tolerante a errores)
+:: Args: %1 = ruta del zip
+:: ============================================================
+:extraer_zip
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0extraer-node-modules.ps1" -ZipPath "%~1" 2>nul
+goto :eof

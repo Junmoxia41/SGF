@@ -78,11 +78,14 @@ echo     sgf-client-modules.zip   - Dependencias del frontend
 echo.
 echo   PARA LLEVAR A UNA PC SIN INTERNET:
 echo   1. Copie los 3 .zip a la PC destino
-echo   2. Descomprima los 3 en la misma carpeta
-echo   3. Ejecute instalar-todo.bat (detectara los node_modules y
-echo      no necesitara internet)
-echo   4. Ejecute start-servidor.bat
+echo   2. Ejecute instalar-todo.bat
+echo      (extrae los .zip automaticamente con extraer-node-modules.ps1)
+echo   3. Ejecute start-servidor.bat
 echo.
+echo   Si la extraccion automatica falla, puede extraer los .zip
+echo   manualmente con el Explorador de Windows. Es normal que
+echo   algunos antivirus marquen archivos como sospechosos; si pasa,
+echo   agregue la carpeta a las exclusiones antes de extraer.
 echo   La PC destino no necesitara internet para arrancar el
 echo   servidor, pero si tendra que tener Node.js instalado.
 echo.

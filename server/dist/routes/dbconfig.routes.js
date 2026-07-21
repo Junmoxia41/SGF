@@ -153,21 +153,30 @@ async function testOracle(config) {
 async function testMssql(config) {
     try {
         const mssql = await import("mssql");
+        // Soportar instancias tipo SERVIDOR\SQLEXPRESS - tedious necesita instanceName separado
+        let serverName = config.server;
+        let instanceName;
+        if (serverName.includes("\\")) {
+            const idx = serverName.indexOf("\\");
+            instanceName = serverName.slice(idx + 1).trim();
+            serverName = serverName.slice(0, idx).trim();
+        }
         const pool = await new mssql.default.ConnectionPool({
             user: config.user,
             password: config.password,
-            server: config.server,
+            server: serverName,
             port: Number(config.port) || 1433,
             database: config.database,
             options: {
                 encrypt: config.encrypt ?? false,
                 trustServerCertificate: config.trustServerCertificate ?? true,
+                instanceName: instanceName || undefined,
             },
         }).connect();
         const started = Date.now();
         const result = await pool.request().query("SELECT 1 AS ok");
         const latency = Date.now() - started;
-        const tables = await pool.request().query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME LIKE 'SGF\\_%' ESCAPE '\\\\' ORDER BY TABLE_NAME");
+        const tables = await pool.request().query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME LIKE 'SGF[_]%' ORDER BY TABLE_NAME");
         await pool.close();
         return {
             success: true,

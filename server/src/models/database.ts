@@ -479,7 +479,15 @@ export async function connectMssqlRuntime(config?: Partial<MssqlRuntimeConfig>) 
     mssqlDriver = (await import('mssql')).default;
   }
 
-  const server = String(config?.server || process.env.MSSQL_SERVER || 'localhost');
+  // Soportar formato SERVIDOR\\INSTANCIA (ej: G108106146\\SQLEXPRESS)
+  let serverRaw = String(config?.server || process.env.MSSQL_SERVER || 'localhost');
+  let instanceName: string | undefined;
+  if (serverRaw.includes("\\")) {
+    const idx = serverRaw.indexOf("\\");
+    instanceName = serverRaw.slice(idx + 1).trim();
+    serverRaw = serverRaw.slice(0, idx).trim();
+  }
+  const server = serverRaw;
   const port = Number(config?.port || process.env.MSSQL_PORT || 1433);
   const database = String(config?.database || process.env.MSSQL_DATABASE || 'sgf');
   const user = String(config?.user || process.env.MSSQL_USER || 'sa');
@@ -491,15 +499,22 @@ export async function connectMssqlRuntime(config?: Partial<MssqlRuntimeConfig>) 
     ? Boolean(config.trustServerCertificate)
     : String(process.env.MSSQL_TRUST_CERT || 'true').toLowerCase() !== 'false';
 
-  const nextConfig = {
+  const nextConfig: any = {
     user, password, server, port, database,
-    options: { encrypt, trustServerCertificate },
+    options: { encrypt, trustServerCertificate, instanceName: instanceName || undefined },
     pool: {
       max: Number(process.env.MSSQL_POOL_MAX || 10),
       min: Number(process.env.MSSQL_POOL_MIN || 0),
       idleTimeoutMillis: Number(process.env.MSSQL_POOL_IDLE_MS || 30000),
     },
   };
+  // Si hay instancia pero tambien puerto, tedious puede quejarse; si puerto es 1433 (default)
+  // y hay instancia, dejamos que el driver resuelva por Browser. Si usuario especificó puerto diferente,
+  // lo respetamos.
+  if (instanceName && port === 1433 && !config?.port && !process.env.MSSQL_PORT) {
+    // Dejar port undefined para que use el browser
+    delete nextConfig.port;
+  }
 
   const connectTimeoutMs = Number(process.env.MSSQL_CONNECT_TIMEOUT_MS || 5000);
   let nextPool: any;

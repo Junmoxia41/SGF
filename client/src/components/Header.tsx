@@ -3,7 +3,6 @@ import {
   HardDrive,
   LogOut,
   Moon,
-  Plug,
   Server,
   Sun,
   Wifi,
@@ -18,7 +17,7 @@ type Props = {
   dbMode?: string;
   onToggleTheme: () => void;
   onLogout: () => void;
-  onOpenDbConfig: () => void;
+  onDisconnect: () => void;
 };
 
 function MotorIcon({ mode, className }: { mode?: string; className?: string }) {
@@ -35,7 +34,7 @@ function MotorLabel(mode?: string): string {
   return "BD";
 }
 
-export function Header({ user, theme, dbOk, dbMode, onToggleTheme, onLogout, onOpenDbConfig }: Props) {
+export function Header({ user, theme, dbOk, dbMode, onToggleTheme, onLogout, onDisconnect }: Props) {
   return (
     <header className="sticky top-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
@@ -50,19 +49,21 @@ export function Header({ user, theme, dbOk, dbMode, onToggleTheme, onLogout, onO
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Solo Desconectar dentro de la app - ya no abre modal de config */}
           <button
-            onClick={onOpenDbConfig}
+            onClick={onDisconnect}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
               dbOk
-                ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
-                : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                : "bg-gray-100 dark:bg-gray-800 text-gray-500"
             }`}
-            title={`Motor activo: ${MotorLabel(dbMode)}`}
+            title={`Motor activo: ${MotorLabel(dbMode)} - Click para desconectar y volver a SQLite`}
           >
             {dbOk ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
             <MotorIcon mode={dbMode} className="w-3 h-3 opacity-70" />
-            <span className="hidden md:inline uppercase">{MotorLabel(dbMode)}</span>
-            <Plug className="w-3 h-3 ml-0.5 opacity-60" />
+            <span className="hidden md:inline">Desconectar</span>
+            <span className="md:hidden uppercase">{MotorLabel(dbMode)}</span>
+            <LogOut className="w-3 h-3 ml-0.5 opacity-60" />
           </button>
 
           <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800">

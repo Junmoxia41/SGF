@@ -54,6 +54,22 @@ export default function App() {
     setTab("procesar");
   }, [auth]);
 
+  const handleDbDisconnect = useCallback(async () => {
+    if (!confirm("¿Desconectar de BD enterprise y volver a SQLite local?")) return;
+    try {
+      const res = await fetch("/api/db/disconnect", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        showToast("success", "Desconectado, ahora en SQLite local. Recargando...");
+        setTimeout(() => window.location.reload(), 800);
+      } else {
+        showToast("error", data.error || "No se pudo desconectar");
+      }
+    } catch (e: any) {
+      showToast("error", e.message || "Error al desconectar");
+    }
+  }, []);
+
   const visibleTabs = useMemo(() => TABS.filter((t) => (t.adminOnly ? auth.user?.role === "admin" : true)), [auth.user]);
 
   if (server.status === "offline") return <ServerOfflineScreen onRetry={server.recheck} />;
@@ -102,7 +118,7 @@ export default function App() {
         dbMode={server.info?.dbMode}
         onToggleTheme={theme.toggle}
         onLogout={handleLogout}
-        onOpenDbConfig={() => setShowDbConfig(true)}
+        onDisconnect={handleDbDisconnect}
       />
 
       <TabNav tabs={visibleTabs} active={tab} onChange={(id) => setTab(id)} />
@@ -135,8 +151,6 @@ export default function App() {
           {tab === "logs" && auth.user.role === "admin" && <LogsTab />}
         </AnimatePresence>
       </main>
-
-      {showDbConfig && <DbConfigPanel onClose={() => setShowDbConfig(false)} showToast={showToast} />}
 
       {editingUser && (
         <EditUserModal

@@ -17,7 +17,7 @@ export function LoginScreen({ serverInfo, loginError, onLogin, onOpenDbConfig, o
 
   const dbMode = (serverInfo?.dbMode || "sqlite").toLowerCase();
   const isEnterprise = dbMode === "mssql" || dbMode === "oracle";
-  const modeLabel = dbMode === "mssql" ? "SQL Server" : dbMode === "oracle" ? "Oracle" : "SQLite";
+  const modeLabel = dbMode === "mssql" ? "SQL Server" : dbMode === "oracle" ? "Oracle" : "SQLITE";
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -46,45 +46,45 @@ export function LoginScreen({ serverInfo, loginError, onLogin, onOpenDbConfig, o
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4 relative">
-      {/* Boton Conectar / Desconectar + Engranaje en esquina derecha - nuevo flujo */}
-      <div className="absolute top-4 right-4 z-20">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-2.5 flex flex-col items-center min-w-[130px]">
-          <div className="flex items-center gap-2 w-full justify-between">
-            <button
-              onClick={() => (isEnterprise ? handleDisconnect() : onOpenDbConfig?.())}
-              disabled={disconnecting}
-              className={`flex items-center gap-1.5 text-sm font-semibold px-2.5 py-1 rounded-lg transition-colors ${
-                isEnterprise
-                  ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
-                  : "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
-              }`}
-              title={isEnterprise ? "Desconectar de BD enterprise y volver a SQLite" : "Conectar a SQL Server / Oracle"}
-            >
-              {isEnterprise ? <LogOut className="w-3.5 h-3.5" /> : <Plug className="w-3.5 h-3.5" />}
-              {disconnecting ? "..." : isEnterprise ? "Desconectar" : "Conectar"}
-            </button>
-            <button
-              onClick={() => onOpenDbConfig?.()}
-              className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors"
-              title="Configurar Base de Datos"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="mt-2 flex flex-col items-center">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isEnterprise ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300" : "bg-gray-100 dark:bg-gray-700 text-gray-500"}`}>
-              <Database className="w-5 h-5" />
-            </div>
-            <span className="text-[10px] font-mono font-bold text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-wide">{modeLabel}</span>
-            <div className={`mt-1 w-2 h-2 rounded-full ${serverInfo?.db?.ok ? "bg-emerald-500" : "bg-amber-500"} animate-pulse`} title={serverInfo?.db?.ok ? "BD OK" : "BD no OK"} />
-          </div>
-        </div>
-      </div>
-
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8">
-          <div className="text-center mb-8">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8 relative">
+          {/* CUADRO DE BD MOVIDO DENTRO DEL RECUADRO DE INICIO DE SESION - esquina superior derecha */}
+          <div className="absolute top-3 right-3 z-10">
+            <div className="bg-gray-900/90 dark:bg-gray-900 border border-gray-700 rounded-xl shadow-lg p-2 flex flex-col items-center min-w-[110px] backdrop-blur-sm">
+              <div className="flex items-center gap-1.5 w-full justify-between">
+                <button
+                  onClick={() => (isEnterprise ? handleDisconnect() : onOpenDbConfig?.())}
+                  disabled={disconnecting}
+                  className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md transition-colors ${
+                    isEnterprise
+                      ? "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
+                      : "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                  }`}
+                  title={isEnterprise ? "Desconectar de BD enterprise" : "Conectar a SQL Server / Oracle"}
+                >
+                  {isEnterprise ? <LogOut className="w-3 h-3" /> : <Plug className="w-3 h-3" />}
+                  {disconnecting ? "..." : isEnterprise ? "Desconectar" : "Conectar"}
+                </button>
+                <button
+                  onClick={() => onOpenDbConfig?.()}
+                  className="p-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                  title="Configurar Base de Datos"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="mt-2 flex flex-col items-center">
+                <div className={`w-7 h-7 rounded-md flex items-center justify-center ${isEnterprise ? "bg-emerald-500/20 text-emerald-300" : "bg-gray-700 text-gray-400"}`}>
+                  <Database className="w-4 h-4" />
+                </div>
+                <span className="text-[9px] font-mono font-bold text-gray-400 mt-1 uppercase tracking-wider">{modeLabel}</span>
+                <div className={`mt-1 w-1.5 h-1.5 rounded-full ${serverInfo?.db?.ok ? "bg-emerald-400" : "bg-amber-400"} animate-pulse`} />
+              </div>
+            </div>
+          </div>
+
+          <div className="text-center mb-8 mt-2">
             <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
               <Database className="w-8 h-8 text-white" />
             </div>
@@ -96,7 +96,7 @@ export function LoginScreen({ serverInfo, loginError, onLogin, onOpenDbConfig, o
                 Servidor conectado{serverInfo.db?.ok ? ` · ${serverInfo.dbMode?.toUpperCase() || "BD"} OK` : ""}
               </div>
             )}
-            <div className="mt-3 text-[11px] text-gray-400">
+            <div className="mt-2 text-[11px] text-gray-400">
               Motor: <span className="font-mono font-bold uppercase">{modeLabel}</span> {isEnterprise ? "· Enterprise" : "· Local (respaldo)"}
             </div>
           </div>

@@ -49,17 +49,17 @@ export function LoginScreen({ serverInfo, loginError, onLogin, onOpenDbConfig, o
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8 relative">
-          {/* CUADRO DE BD MOVIDO DENTRO DEL RECUADRO DE INICIO DE SESION - esquina superior derecha */}
+          {/* CUADRO DE BD DENTRO DEL RECUADRO - ahora con mismo tema que la app (claro/oscuro) */}
           <div className="absolute top-3 right-3 z-10">
-            <div className="bg-gray-900/90 dark:bg-gray-900 border border-gray-700 rounded-xl shadow-lg p-2 flex flex-col items-center min-w-[110px] backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg p-2 flex flex-col items-center min-w-[110px] backdrop-blur-sm">
               <div className="flex items-center gap-1.5 w-full justify-between">
                 <button
                   onClick={() => (isEnterprise ? handleDisconnect() : onOpenDbConfig?.())}
                   disabled={disconnecting}
                   className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md transition-colors ${
                     isEnterprise
-                      ? "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
-                      : "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                      ? "bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/30 border border-amber-200 dark:border-amber-500/20"
+                      : "bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/30 border border-emerald-200 dark:border-emerald-500/20"
                   }`}
                   title={isEnterprise ? "Desconectar de BD enterprise" : "Conectar a SQL Server / Oracle"}
                 >
@@ -68,18 +68,18 @@ export function LoginScreen({ serverInfo, loginError, onLogin, onOpenDbConfig, o
                 </button>
                 <button
                   onClick={() => onOpenDbConfig?.()}
-                  className="p-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                  className="p-1.5 rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors border border-gray-200 dark:border-gray-600"
                   title="Configurar Base de Datos"
                 >
                   <Settings className="w-3.5 h-3.5" />
                 </button>
               </div>
               <div className="mt-2 flex flex-col items-center">
-                <div className={`w-7 h-7 rounded-md flex items-center justify-center ${isEnterprise ? "bg-emerald-500/20 text-emerald-300" : "bg-gray-700 text-gray-400"}`}>
+                <div className={`w-7 h-7 rounded-md flex items-center justify-center border ${isEnterprise ? "bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/20" : "bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600"}`}>
                   <Database className="w-4 h-4" />
                 </div>
-                <span className="text-[9px] font-mono font-bold text-gray-400 mt-1 uppercase tracking-wider">{modeLabel}</span>
-                <div className={`mt-1 w-1.5 h-1.5 rounded-full ${serverInfo?.db?.ok ? "bg-emerald-400" : "bg-amber-400"} animate-pulse`} />
+                <span className="text-[9px] font-mono font-bold text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-wider">{modeLabel}</span>
+                <div className={`mt-1 w-1.5 h-1.5 rounded-full ${serverInfo?.db?.ok ? "bg-emerald-500" : "bg-amber-500"} animate-pulse`} />
               </div>
             </div>
           </div>
